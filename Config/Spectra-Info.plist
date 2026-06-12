@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Spectra</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Spectra uses Screen &amp; System Audio Recording permission to analyze live system audio locally for visualizations. Audio is not uploaded, recorded, or saved by default.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Spectra does not need microphone input for system audio visualization. This string is present only if future user-selected device capture is enabled.</string>
+</dict>
+</plist>
