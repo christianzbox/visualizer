@@ -1,0 +1,256 @@
+import AppKit
+import Combine
+import Foundation
+import SpectraCore
+
+@MainActor
+final class AppState: ObservableObject {
+    @Published var latestFrame: VisualAudioFrame = .silent
+    @Published var isCapturing = false
+    @Published var statusMessage = "Ready"
+    @Published var errorMessage: String?
+    @Published var availableSources: [AudioSource] = []
+    @Published var currentSource: AudioSource?
+    @Published var settings: UserSettings {
+        didSet {
+            testSignalEngine.signalType = settings.testSignalType
+            settingsStore.save(settings)
+            updateWindowLevel()
+        }
+    }
+    @Published var framesPerSecond: Double = 0
+
+    let frameStore: VisualFrameStore
+
+    private let settingsStore = SettingsStore()
+    private let pipeline: AudioProcessingPipeline
+    private let testSignalEngine: TestSignalCaptureEngine
+    private let systemAudioEngine = MacSystemAudioCaptureEngine()
+    private var activeEngine: AudioCaptureEngine?
+
+    init() {
+        let loaded = settingsStore.load()
+        let frameStore = VisualFrameStore()
+        self.settings = loaded
+        self.frameStore = frameStore
+        self.pipeline = AudioProcessingPipeline(frameStore: frameStore)
+        self.testSignalEngine = TestSignalCaptureEngine(signalType: loaded.testSignalType)
+        self.pipeline.onFrame = { [weak self] frame in
+            Task { @MainActor in
+                self?.latestFrame = frame
+            }
+        }
+    }
+
+    var selectedPreset: VisualPresetID {
+        get { settings.selectedPreset }
+        set { settings.selectedPreset = newValue }
+    }
+
+    var presetSettings: PresetSettings {
+        get { settings.presetSettings }
+        set { settings.presetSettings = newValue }
+    }
+
+    var captureMode: CaptureMode {
+        get { settings.captureMode }
+        set {
+            settings.captureMode = newValue
+            if newValue == .testSignal {
+                currentSource = AudioSource(id: "test-signal", name: "Test Signal", kind: .testSignal)
+            }
+        }
+    }
+
+    var testSignalType: TestSignalType {
+        get { settings.testSignalType }
+        set {
+            settings.testSignalType = newValue
+            testSignalEngine.signalType = newValue
+        }
+    }
+
+    func bootstrap() async {
+        updateWindowLevel()
+        if settings.launchFullScreen {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.toggleFullScreen()
+            }
+        }
+        await refreshSources()
+        if settings.captureMode == .testSignal {
+            await startCapture()
+        }
+    }
+
+    func refreshSources() async {
+        var sources: [AudioSource] = []
+        if let testSource = try? await testSignalEngine.listSources().first {
+            sources.append(testSource)
+        }
+        do {
+            sources.append(contentsOf: try await systemAudioEngine.listSources())
+            errorMessage = nil
+        } catch {
+            errorMessage = formatCaptureError(error)
+        }
+        availableSources = sources
+        currentSource = sourceForCurrentSettings(from: sources)
+    }
+
+    func startCapture() async {
+        await startCapture(retainedError: nil)
+    }
+
+    private func startCapture(retainedError: String?) async {
+        await stopCapture()
+        pipeline.reset()
+        errorMessage = retainedError
+
+        let engine: AudioCaptureEngine
+        switch settings.captureMode {
+        case .testSignal:
+            engine = testSignalEngine
+        case .systemMix, .application:
+            engine = systemAudioEngine
+        }
+
+        do {
+            if let source = sourceForCurrentSettings(from: availableSources) {
+                try await engine.selectSource(source)
+                currentSource = source
+            }
+            let pipeline = self.pipeline
+            engine.setAudioBufferHandler { frame in
+                pipeline.consume(frame)
+            }
+            try await engine.start()
+            activeEngine = engine
+            isCapturing = true
+            statusMessage = "Listening to \(engine.currentSource?.name ?? "audio")"
+        } catch {
+            isCapturing = false
+            activeEngine = nil
+            let message = formatCaptureError(error)
+            errorMessage = message
+            statusMessage = "Capture unavailable"
+            if settings.captureMode != .testSignal {
+                statusMessage = "Using Test Signal fallback"
+                settings.captureMode = .testSignal
+                await startCapture(retainedError: message)
+            }
+        }
+    }
+
+    func stopCapture() async {
+        if let activeEngine {
+            await activeEngine.stop()
+        }
+        activeEngine = nil
+        isCapturing = false
+        statusMessage = "Stopped"
+    }
+
+    func requestSystemCapturePermission() {
+        Permissions.requestScreenCaptureAccess()
+    }
+
+    func toggleFullScreen() {
+        NSApp.keyWindow?.toggleFullScreen(nil)
+    }
+
+    func toggleAlwaysOnTop() {
+        settings.alwaysOnTop.toggle()
+        updateWindowLevel()
+    }
+
+    func updateFramesPerSecond(_ fps: Double) {
+        framesPerSecond = fps
+    }
+
+    private func sourceForCurrentSettings(from sources: [AudioSource]) -> AudioSource? {
+        if settings.captureMode == .testSignal {
+            return sources.first { $0.kind == .testSignal }
+        }
+        if settings.captureMode == .systemMix {
+            return sources.first { $0.kind == .systemMix }
+        }
+        if let id = settings.selectedSourceId {
+            return sources.first { $0.id == id }
+        }
+        return sources.first { $0.kind == .application } ?? sources.first { $0.kind == .systemMix }
+    }
+
+    private func updateWindowLevel() {
+        NSApp.windows.forEach { window in
+            window.level = settings.alwaysOnTop ? .floating : .normal
+        }
+    }
+
+    private func formatCaptureError(_ error: Error) -> String {
+        guard let captureError = error as? AudioCaptureError else {
+            return "\(error.localizedDescription) Test Signal Mode remains available."
+        }
+        let parts = [
+            captureError.errorDescription,
+            captureError.failureReason,
+            captureError.recoverySuggestion
+        ].compactMap { $0 }
+        return parts.joined(separator: " ")
+    }
+}
+
+final class AudioProcessingPipeline {
+    var onFrame: ((VisualAudioFrame) -> Void)?
+
+    private let analysisEngine = AudioAnalysisEngine()
+    private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInteractive)
+    private let frameStore: VisualFrameStore
+    private var lastUIPublish: TimeInterval = 0
+
+    init(frameStore: VisualFrameStore) {
+        self.frameStore = frameStore
+    }
+
+    func reset() {
+        analysisQueue.sync {
+            analysisEngine.reset()
+            frameStore.update(.silent)
+            lastUIPublish = 0
+        }
+    }
+
+    func consume(_ frame: AudioBufferFrame) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            let visualFrame = self.analysisEngine.process(frame)
+            self.frameStore.update(visualFrame)
+
+            let now = CACurrentMediaTime()
+            if now - self.lastUIPublish > 1.0 / 20.0 {
+                self.lastUIPublish = now
+                DispatchQueue.main.async {
+                    self.onFrame?(visualFrame)
+                }
+            }
+        }
+    }
+}
+
+final class VisualFrameStore {
+    private let lock = NSLock()
+    private var frame: VisualAudioFrame = .silent
+
+    func update(_ frame: VisualAudioFrame) {
+        lock.lock()
+        self.frame = frame
+        lock.unlock()
+    }
+
+    func read() -> VisualAudioFrame {
+        lock.lock()
+        let output = frame
+        lock.unlock()
+        return output
+    }
+}
