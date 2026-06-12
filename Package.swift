@@ -38,7 +38,10 @@ let package = Package(
         .executableTarget(
             name: "SpectraDiagnostics",
             dependencies: ["SpectraCore"],
-            path: "Diagnostics/SpectraDiagnostics"
+            path: "Diagnostics/SpectraDiagnostics",
+            linkerSettings: [
+                .linkedFramework("Metal")
+            ]
         ),
         .testTarget(
             name: "SpectraTests",

@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import SpectraCore
 
 enum DiagnosticFailure: Error, CustomStringConvertible {
@@ -22,6 +23,7 @@ struct SpectraDiagnostics {
             try testBeatDetection()
             try testSmoothing()
             try testRingBuffer()
+            try testMetalShaderCompilation()
             try await testSignalGeneration()
             try testSettingsPersistence()
             try testPresetCatalog()
@@ -148,6 +150,18 @@ struct SpectraDiagnostics {
         try expect(buffer.latest(5) == [3, 4, 5, 6, 7], "Ring buffer should retain newest samples")
         buffer.clear()
         try expect(buffer.latest(5).isEmpty, "Ring buffer clear should remove samples")
+    }
+
+    private static func testMetalShaderCompilation() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw DiagnosticFailure.expectation("Diagnostics require a Metal device")
+        }
+        let shaderURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Spectra/Visuals/Metal/Shaders.metal")
+        let source = try String(contentsOf: shaderURL, encoding: .utf8)
+        let library = try device.makeLibrary(source: source, options: nil)
+        try expect(library.makeFunction(name: "spectra_vertex") != nil, "Metal shader should expose spectra_vertex")
+        try expect(library.makeFunction(name: "spectra_fragment") != nil, "Metal shader should expose spectra_fragment")
     }
 
     private static func testSettingsPersistence() throws {

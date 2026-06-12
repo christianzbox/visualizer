@@ -14,12 +14,12 @@ struct VertexOut {
 vertex VertexOut spectra_vertex(uint vertexID [[vertex_id]],
                                 constant SpectraVertex *vertices [[buffer(0)]]) {
     VertexOut out;
-    SpectraVertex vertex = vertices[vertexID];
-    out.position = float4(vertex.position, 0.0, 1.0);
-    out.color = vertex.color;
+    SpectraVertex inputVertex = vertices[vertexID];
+    out.position = float4(inputVertex.position, 0.0, 1.0);
+    out.color = inputVertex.color;
     return out;
 }
 
-fragment half4 spectra_fragment(VertexOut in [[stage_in]]) {
-    return half4(in.color);
+fragment half4 spectra_fragment(VertexOut input [[stage_in]]) {
+    return half4(input.color);
 }
