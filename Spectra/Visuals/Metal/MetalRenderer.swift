@@ -109,17 +109,34 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     private func makePipeline(for view: MTKView) -> MTLRenderPipelineState? {
         guard let device = view.device else { return nil }
-        let library = try? device.makeLibrary(source: Self.shaderSource, options: nil)
+        let library: MTLLibrary
+        do {
+            library = try device.makeLibrary(source: Self.shaderSource, options: nil)
+        } catch {
+            assertionFailure("Spectra Metal shader compilation failed: \(error.localizedDescription)")
+            return nil
+        }
+        guard let vertexFunction = library.makeFunction(name: "spectra_vertex"),
+              let fragmentFunction = library.makeFunction(name: "spectra_fragment") else {
+            assertionFailure("Spectra Metal shader library is missing required functions.")
+            return nil
+        }
+
         let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = library?.makeFunction(name: "spectra_vertex")
-        descriptor.fragmentFunction = library?.makeFunction(name: "spectra_fragment")
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
         descriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
         descriptor.colorAttachments[0].isBlendingEnabled = true
         descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
         descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
         descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
         descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
-        return try? device.makeRenderPipelineState(descriptor: descriptor)
+        do {
+            return try device.makeRenderPipelineState(descriptor: descriptor)
+        } catch {
+            assertionFailure("Spectra Metal pipeline creation failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private func appendVertices(
@@ -471,14 +488,14 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     vertex VertexOut spectra_vertex(uint vertexID [[vertex_id]],
                                     constant SpectraVertex *vertices [[buffer(0)]]) {
         VertexOut out;
-        SpectraVertex vertex = vertices[vertexID];
-        out.position = float4(vertex.position, 0.0, 1.0);
-        out.color = vertex.color;
+        SpectraVertex inputVertex = vertices[vertexID];
+        out.position = float4(inputVertex.position, 0.0, 1.0);
+        out.color = inputVertex.color;
         return out;
     }
 
-    fragment half4 spectra_fragment(VertexOut in [[stage_in]]) {
-        return half4(in.color);
+    fragment half4 spectra_fragment(VertexOut input [[stage_in]]) {
+        return half4(input.color);
     }
     """
 }
