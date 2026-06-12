@@ -49,3 +49,17 @@ jobs:
 
       - name: Package description
         run: swift package describe
+
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "## Spectra CI passed"
+            echo ""
+            echo "- Package resolution: passed"
+            echo "- Debug build: passed"
+            echo "- Release build: passed"
+            echo "- Unit tests: passed"
+            echo "- Diagnostics: passed"
+            echo "- Package description: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
