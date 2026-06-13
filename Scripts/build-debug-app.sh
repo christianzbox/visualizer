@@ -54,6 +54,19 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 PLIST
 
 xattr -cr "$APP_BUNDLE"
-codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
+
+SIGN_IDENTITY="${SPECTRA_CODE_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY="$(
+        security find-identity -v -p codesigning 2>/dev/null \
+            | awk -F '"' '/"Apple Development:|Developer ID Application:|Mac Developer:/{ print $2; exit }'
+    )"
+fi
+
+if [[ -n "$SIGN_IDENTITY" ]]; then
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE" >/dev/null
+else
+    codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
+fi
 
 echo "$APP_BUNDLE"

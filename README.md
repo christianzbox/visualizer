@@ -37,7 +37,13 @@ Scripts/build-debug-app.sh
 open .build/Spectra.app
 ```
 
-The script preserves the `.app` bundle path and signs the debug app bundle ad hoc after each build. If macOS privacy still drops the grant after major local changes, re-open `.build/Spectra.app`, grant Screen & System Audio Recording again, then quit and relaunch the app.
+The script preserves the `.app` bundle path and signs the debug app bundle after each build. If macOS privacy still drops the grant after major local changes, re-open `.build/Spectra.app`, grant Screen & System Audio Recording again, then quit and relaunch the app.
+
+If a local Apple Development or Developer ID signing identity exists, the script uses it automatically. That gives macOS privacy a stable code requirement for `com.christianzbox.spectra.debug` instead of a rebuild-specific ad-hoc code hash. To force a specific identity:
+
+```bash
+SPECTRA_CODE_SIGN_IDENTITY="Apple Development: you@example.com (TEAMID)" Scripts/build-debug-app.sh
+```
 
 Open in Xcode:
 
@@ -56,7 +62,7 @@ This machine's active Command Line Tools can build the XCTest bundle but do not 
 
 ## Permissions
 
-System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission, not Accessibility. Spectra preflights permission before enumerating system sources, shows a clear recovery message, opens the correct privacy pane from the app, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
+System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission, not Accessibility. Spectra asks ScreenCaptureKit for capture sources directly, shows a clear recovery message, opens the recording privacy pane from the app, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
 
 Privacy text shown by the app:
 
@@ -78,6 +84,7 @@ Privacy text shown by the app:
 
 - If System Mix does not start, use the in-app recording privacy button or open System Settings and grant Screen & System Audio Recording to Spectra.
 - If Spectra does not appear in Privacy & Security, launch it through `open .build/Spectra.app`; raw `swift run Spectra` launches as a command-line executable and can have an unstable macOS privacy identity.
+- If Spectra is already listed but System Mix still fails after this signing change, remove Spectra from Screen & System Audio Recording, run `tccutil reset ScreenCapture com.christianzbox.spectra.debug`, rebuild with `Scripts/build-debug-app.sh`, launch `.build/Spectra.app`, and grant access again.
 - If permission was just changed, quit and relaunch Spectra or refresh sources.
 - If no real audio is captured, switch to Test Signal Mode to verify the renderer and analysis pipeline.
 - If an app source disappears, refresh sources and select System Mix.

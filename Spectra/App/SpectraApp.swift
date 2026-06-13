@@ -11,6 +11,9 @@ struct SpectraApp: App {
                 .frame(minWidth: 720, minHeight: 500)
                 .task {
                     await appState.bootstrap()
+                    if CommandLine.arguments.contains("--start-capture") {
+                        await appState.startCapture()
+                    }
                 }
         }
         .defaultSize(width: 1080, height: 700)

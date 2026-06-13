@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import OSLog
 import SpectraCore
 
 @MainActor
@@ -23,6 +24,7 @@ final class AppState: ObservableObject {
 
     let frameStore: VisualFrameStore
 
+    private let logger = Logger(subsystem: "com.christianzbox.spectra", category: "capture")
     private let settingsStore = SettingsStore()
     private let pipeline: AudioProcessingPipeline
     private let testSignalEngine: TestSignalCaptureEngine
@@ -112,9 +114,16 @@ final class AppState: ObservableObject {
         }
         do {
             sources.append(contentsOf: try await systemAudioEngine.listSources())
+            recordingPermissionStatus = .authorized
+            logger.info("Refreshed capture sources: \(sources.count, privacy: .public)")
             errorMessage = nil
         } catch {
-            errorMessage = formatCaptureError(error)
+            if (error as? AudioCaptureError) == .permissionDenied {
+                recordingPermissionStatus = .notDeterminedOrDenied
+            }
+            let message = formatCaptureError(error)
+            logger.error("Capture source refresh failed: \(message, privacy: .public)")
+            errorMessage = message
         }
         availableSources = sources
         currentSource = sourceForCurrentSettings(from: sources)
@@ -149,11 +158,16 @@ final class AppState: ObservableObject {
             try await engine.start()
             activeEngine = engine
             isCapturing = true
+            if settings.captureMode != .testSignal {
+                recordingPermissionStatus = .authorized
+            }
             statusMessage = "Listening to \(engine.currentSource?.name ?? "audio")"
+            logger.info("Started capture mode=\(self.settings.captureMode.rawValue, privacy: .public) source=\(engine.currentSource?.name ?? "audio", privacy: .public)")
         } catch {
             isCapturing = false
             activeEngine = nil
             let message = formatCaptureError(error)
+            logger.error("Capture start failed: \(message, privacy: .public)")
             errorMessage = message
             statusMessage = "Capture unavailable"
             if settings.captureMode != .testSignal {

@@ -1,5 +1,4 @@
 import AVFoundation
-import CoreGraphics
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
@@ -29,17 +28,9 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
         guard Self.isSupportedRuntime else {
             throw AudioCaptureError.unsupportedOS(Self.unsupportedOSMessage)
         }
-        guard CGPreflightScreenCaptureAccess() else {
-            throw AudioCaptureError.permissionDenied
-        }
 
         var sources = [systemSource]
-        let content: SCShareableContent
-        do {
-            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        } catch {
-            throw Self.mapShareableContentError(error)
-        }
+        let content = try await Self.loadShareableContent()
         let appSources = content.applications.map { app in
             AudioSource(
                 id: "app-\(app.processID)",
@@ -71,16 +62,8 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
         guard Self.isSupportedRuntime else {
             throw AudioCaptureError.unsupportedOS(Self.unsupportedOSMessage)
         }
-        guard CGPreflightScreenCaptureAccess() else {
-            throw AudioCaptureError.permissionDenied
-        }
 
-        let content: SCShareableContent
-        do {
-            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        } catch {
-            throw Self.mapShareableContentError(error)
-        }
+        let content = try await Self.loadShareableContent()
 
         guard let display = content.displays.first else {
             throw AudioCaptureError.noSourcesAvailable
@@ -116,7 +99,7 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
             try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: outputQueue)
             try await stream.startCapture()
         } catch {
-            throw AudioCaptureError.streamStartFailed(error.localizedDescription)
+            throw Self.mapStreamStartError(error)
         }
 
         streamOutput = output
@@ -146,11 +129,40 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
         "Spectra system audio capture requires macOS 13 or newer. Test Signal Mode is available on this Mac."
     }
 
+    private static func loadShareableContent() async throws -> SCShareableContent {
+        do {
+            if #available(macOS 14.4, *) {
+                return try await SCShareableContent.currentProcess
+            }
+            return try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        } catch {
+            throw mapShareableContentError(error)
+        }
+    }
+
     private static func mapShareableContentError(_ error: Error) -> AudioCaptureError {
-        if !CGPreflightScreenCaptureAccess() {
+        if isPermissionError(error) {
             return .permissionDenied
         }
-        return .backendUnavailable("ScreenCaptureKit could not enumerate audio sources: \(error.localizedDescription)")
+        return .backendUnavailable("ScreenCaptureKit could not enumerate audio sources: \(describe(error))")
+    }
+
+    private static func mapStreamStartError(_ error: Error) -> AudioCaptureError {
+        if isPermissionError(error) {
+            return .permissionDenied
+        }
+        return .streamStartFailed("ScreenCaptureKit could not start audio capture: \(describe(error))")
+    }
+
+    private static func isPermissionError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == SCStreamErrorDomain else { return false }
+        return nsError.code == -3801 || nsError.code == -3803
+    }
+
+    private static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(nsError.localizedDescription) (domain \(nsError.domain), code \(nsError.code))"
     }
 }
 
