@@ -9,7 +9,7 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
     public private(set) var sampleRate: Double = 48_000
     public private(set) var channelCount: Int = 2
 
-    private let outputQueue = DispatchQueue(label: "spectra.system-audio.output", qos: .userInteractive)
+    private let outputQueue = DispatchQueue(label: "spectra.system-audio.output", qos: .userInitiated)
     private var stream: SCStream?
     private var streamOutput: StreamOutput?
     private var handler: AudioBufferHandler?
@@ -87,8 +87,8 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
         configuration.channelCount = channelCount
         configuration.width = 2
         configuration.height = 2
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 10)
-        configuration.queueDepth = 3
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        configuration.queueDepth = 5
 
         let output = StreamOutput(sourceId: source.id) { [weak self] frame in
             self?.handler?(frame)

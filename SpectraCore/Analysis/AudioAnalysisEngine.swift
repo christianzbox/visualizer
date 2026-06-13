@@ -6,9 +6,9 @@ public final class AudioAnalysisEngine {
     public let waveformSampleCount: Int
 
     private let rollingSamples: AudioRingBuffer
-    private var volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.46, release: 0.965)
-    private var bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.42, release: 0.972)
-    private var trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.945)
+    private var volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.58, release: 0.972)
+    private var bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.60, release: 0.982)
+    private var trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.64, release: 0.955)
     private var spectrumSmoother: SpectrumSmoother
     private var spectrumNormalizers: [AdaptiveNormalizer]
     private var bandNormalizers: [AdaptiveNormalizer]
@@ -21,17 +21,17 @@ public final class AudioAnalysisEngine {
         self.fftAnalyzer = fftAnalyzer
         self.waveformSampleCount = waveformSampleCount
         self.rollingSamples = AudioRingBuffer(capacity: fftAnalyzer.windowSize)
-        self.spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.46, release: 0.91)
+        self.spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.58, release: 0.93)
         self.spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.12, fall: 0.9992), count: fftAnalyzer.bandCount)
         self.bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.10, fall: 0.9994), count: 6)
     }
 
     public func reset() {
         rollingSamples.clear()
-        volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.46, release: 0.965)
-        bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.42, release: 0.972)
-        trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.945)
-        spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.46, release: 0.91)
+        volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.58, release: 0.972)
+        bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.60, release: 0.982)
+        trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.64, release: 0.955)
+        spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.58, release: 0.93)
         spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.12, fall: 0.9992), count: fftAnalyzer.bandCount)
         bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.10, fall: 0.9994), count: 6)
         onsetDetector = OnsetDetector()
@@ -44,7 +44,8 @@ public final class AudioAnalysisEngine {
         let mono = makeMonoSamples(frame)
         guard !mono.isEmpty else { return .silent }
 
-        let deltaTime = lastTimestamp.map { max(1.0 / 240.0, min(0.1, frame.timestamp - $0)) } ?? (Double(mono.count) / frame.sampleRate)
+        let deltaTime = lastTimestamp.map { max(1.0 / 240.0, min(1.0 / 30.0, frame.timestamp - $0)) }
+            ?? min(1.0 / 30.0, Double(mono.count) / frame.sampleRate)
         rollingSamples.append(mono)
 
         let rms = Self.rms(mono)

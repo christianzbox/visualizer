@@ -102,18 +102,18 @@ private struct RenderSignalState {
         deltaTime: TimeInterval
     ) -> VisualAudioFrame {
         let motion = settings.reduceMotion ? Float(0.08) : Float(settings.motionAmount)
-        let smoothing = Float(settings.smoothing)
-        let sensitivityGain = 0.48 + Float(settings.sensitivity) * 0.62
-        let beatGain = 0.46 + Float(settings.beatReactivity) * 0.46
-        let easedDelta = deltaTime * Double(0.80 + smoothing * 0.55)
+        let smoothing = min(1, max(0, Float(settings.smoothing)))
+        let sensitivityGain = 0.40 + Float(settings.sensitivity) * 0.50
+        let beatGain = 0.34 + Float(settings.beatReactivity) * 0.38
+        let easedDelta = deltaTime * Double(1.06 - smoothing * 0.72)
 
         let volumeInput = shapeEnergy(max(frame.smoothedVolume, frame.rms * 1.18), gain: sensitivityGain, floor: 0.020, power: 1.22, ceiling: 0.86)
         let bassInput = shapeEnergy(max(frame.smoothedBass, frame.bassEnergy), gain: sensitivityGain * 0.92, floor: 0.026, power: 1.24, ceiling: 0.84)
         let midInput = shapeEnergy(frame.midEnergy, gain: sensitivityGain * 0.82, floor: 0.022, power: 1.28, ceiling: 0.78)
         let highMidInput = shapeEnergy(frame.highMidEnergy, gain: sensitivityGain * 0.78, floor: 0.024, power: 1.32, ceiling: 0.74)
         let trebleInput = shapeEnergy(max(frame.smoothedTreble, frame.trebleEnergy), gain: sensitivityGain * 0.86, floor: 0.030, power: 1.36, ceiling: 0.72)
-        let beatInput = shapeEnergy(frame.beatPulse * 0.70 + frame.onsetStrength * 0.22, gain: beatGain, floor: 0.040, power: 1.50, ceiling: 0.58)
-        let onsetInput = shapeEnergy(frame.onsetStrength, gain: beatGain * 0.74, floor: 0.045, power: 1.55, ceiling: 0.50)
+        let beatInput = shapeEnergy(frame.beatPulse * 0.62 + frame.onsetStrength * 0.18, gain: beatGain, floor: 0.040, power: 1.55, ceiling: 0.44)
+        let onsetInput = shapeEnergy(frame.onsetStrength, gain: beatGain * 0.70, floor: 0.045, power: 1.60, ceiling: 0.38)
 
         let smoothedVolume = volume.process(volumeInput, deltaTime: easedDelta)
         let smoothedBass = bass.process(bassInput, deltaTime: easedDelta)
@@ -130,9 +130,9 @@ private struct RenderSignalState {
         visualTime += Float(deltaTime) * (
             0.30
             + motion * 0.22
-            + smoothedVolume * 0.11
-            + smoothedBass * 0.08
-            + beatTrail * 0.08
+            + smoothedVolume * 0.07
+            + smoothedBass * 0.05
+            + beatTrail * 0.04
         )
 
         var output = frame
@@ -176,6 +176,10 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var renderSignalState = RenderSignalState()
     private var reusableVertices: [SpectraVertex] = []
     private var reusableTerrainVertices: [TerrainVertex] = []
+    private var reusableTerrainPositions: [SIMD3<Float>] = []
+    private var reusableTerrainHeights: [Float] = []
+    private var reusableTerrainNormals: [SIMD3<Float>] = []
+    private var reusableTerrainColors: [SIMD4<Float>] = []
     private var vertexBuffer: MTLBuffer?
     private var vertexCapacity = 0
     private var terrainVertexBuffer: MTLBuffer?
@@ -234,7 +238,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
 
         let now = CACurrentMediaTime()
-        let deltaTime = max(1.0 / 120.0, min(1.0 / 20.0, now - lastFrameTime))
+        let deltaTime = max(1.0 / 120.0, min(1.0 / 30.0, now - lastFrameTime))
         let rawFrame = frameStore.read()
         let settings = settingsProvider()
         let preset = presetProvider()
@@ -1109,8 +1113,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let view = lookAtMatrix(eye: camera, center: target, up: SIMD3<Float>(0, 1, 0))
         let viewProjection = simd_mul(projection, view)
 
-        let columns = settings.reduceMotion ? 48 : 64
-        let rows = settings.reduceMotion ? 72 : 92
+        let columns = settings.reduceMotion ? 42 : 54
+        let rows = settings.reduceMotion ? 64 : 78
         let worldWidth = style.width
         let worldDepth = style.depth
         let stepX = worldWidth / Float(columns)
@@ -1120,9 +1124,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let pointColumns = columns + 1
         let pointRows = rows + 1
         let pointCount = pointColumns * pointRows
-        var positions = Array(repeating: SIMD3<Float>(repeating: 0), count: pointCount)
-        var heights = Array(repeating: Float(0), count: pointCount)
-        var colors = Array(repeating: SIMD4<Float>(repeating: 1), count: pointCount)
+        prepareTerrainScratch(pointCount: pointCount)
 
         for row in 0..<pointRows {
             let z = startZ + Float(row) * stepZ
@@ -1137,27 +1139,26 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                     style: style,
                     intensity: intensity,
                 )
-                heights[index] = height
-                positions[index] = SIMD3<Float>(x, height, z)
+                reusableTerrainHeights[index] = height
+                reusableTerrainPositions[index] = SIMD3<Float>(x, height, z)
             }
         }
 
-        var normals = Array(repeating: SIMD3<Float>(0, 1, 0), count: pointCount)
         for row in 0..<pointRows {
             for column in 0..<pointColumns {
                 let index = row * pointColumns + column
-                let left = heights[row * pointColumns + max(0, column - 1)]
-                let right = heights[row * pointColumns + min(columns, column + 1)]
-                let back = heights[max(0, row - 1) * pointColumns + column]
-                let forward = heights[min(rows, row + 1) * pointColumns + column]
+                let left = reusableTerrainHeights[row * pointColumns + max(0, column - 1)]
+                let right = reusableTerrainHeights[row * pointColumns + min(columns, column + 1)]
+                let back = reusableTerrainHeights[max(0, row - 1) * pointColumns + column]
+                let forward = reusableTerrainHeights[min(rows, row + 1) * pointColumns + column]
                 let normal = simd_normalize(SIMD3<Float>(
                     -(right - left) / max(0.001, stepX * 2),
                     1.45,
                     -(forward - back) / max(0.001, stepZ * 2)
                 ))
-                normals[index] = normal
-                colors[index] = terrainColor(
-                    position: positions[index],
+                reusableTerrainNormals[index] = normal
+                reusableTerrainColors[index] = terrainColor(
+                    position: reusableTerrainPositions[index],
                     normal: normal,
                     frame: frame,
                     palette: palette,
@@ -1174,12 +1175,12 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 let i10 = row * pointColumns + column + 1
                 let i01 = (row + 1) * pointColumns + column
                 let i11 = (row + 1) * pointColumns + column + 1
-                appendTerrainVertex(&vertices, position: positions[i00], normal: normals[i00], color: colors[i00])
-                appendTerrainVertex(&vertices, position: positions[i10], normal: normals[i10], color: colors[i10])
-                appendTerrainVertex(&vertices, position: positions[i01], normal: normals[i01], color: colors[i01])
-                appendTerrainVertex(&vertices, position: positions[i10], normal: normals[i10], color: colors[i10])
-                appendTerrainVertex(&vertices, position: positions[i11], normal: normals[i11], color: colors[i11])
-                appendTerrainVertex(&vertices, position: positions[i01], normal: normals[i01], color: colors[i01])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i00], normal: reusableTerrainNormals[i00], color: reusableTerrainColors[i00])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i10], normal: reusableTerrainNormals[i10], color: reusableTerrainColors[i10])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i01], normal: reusableTerrainNormals[i01], color: reusableTerrainColors[i01])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i10], normal: reusableTerrainNormals[i10], color: reusableTerrainColors[i10])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i11], normal: reusableTerrainNormals[i11], color: reusableTerrainColors[i11])
+                appendTerrainVertex(&vertices, position: reusableTerrainPositions[i01], normal: reusableTerrainNormals[i01], color: reusableTerrainColors[i01])
             }
         }
         appendWorldObjects(
@@ -1215,6 +1216,21 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             time: time,
             palette: paletteIndex(settings.palette)
         )
+    }
+
+    private func prepareTerrainScratch(pointCount: Int) {
+        if reusableTerrainPositions.count < pointCount {
+            reusableTerrainPositions = Array(repeating: SIMD3<Float>(repeating: 0), count: pointCount)
+        }
+        if reusableTerrainHeights.count < pointCount {
+            reusableTerrainHeights = Array(repeating: 0, count: pointCount)
+        }
+        if reusableTerrainNormals.count < pointCount {
+            reusableTerrainNormals = Array(repeating: SIMD3<Float>(0, 1, 0), count: pointCount)
+        }
+        if reusableTerrainColors.count < pointCount {
+            reusableTerrainColors = Array(repeating: SIMD4<Float>(repeating: 1), count: pointCount)
+        }
     }
 
     private func appendTerrainVertex(

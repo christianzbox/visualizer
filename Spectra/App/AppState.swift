@@ -268,49 +268,69 @@ final class AudioProcessingPipeline {
     var onFrame: ((VisualAudioFrame) -> Void)?
 
     private let analysisEngine = AudioAnalysisEngine()
-    private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInteractive)
+    private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInitiated)
     private let frameStore: VisualFrameStore
+    private let stateLock = NSLock()
     private var lastUIPublish: TimeInterval = 0
     private var pendingFrame: AudioBufferFrame?
-    private var isProcessing = false
+    private var drainScheduled = false
 
     init(frameStore: VisualFrameStore) {
         self.frameStore = frameStore
     }
 
     func reset() {
+        stateLock.lock()
+        pendingFrame = nil
+        drainScheduled = false
+        stateLock.unlock()
+
         analysisQueue.sync {
             analysisEngine.reset()
             frameStore.update(.silent)
             lastUIPublish = 0
-            pendingFrame = nil
-            isProcessing = false
         }
     }
 
     func consume(_ frame: AudioBufferFrame) {
+        stateLock.lock()
+        pendingFrame = frame
+        if drainScheduled {
+            stateLock.unlock()
+            return
+        }
+        drainScheduled = true
+        stateLock.unlock()
+
         analysisQueue.async { [weak self] in
-            guard let self else { return }
-            self.pendingFrame = frame
-            guard !self.isProcessing else { return }
-            self.isProcessing = true
+            self?.drainPendingFrames()
+        }
+    }
 
-            while let frame = self.pendingFrame {
-                self.pendingFrame = nil
-                let visualFrame = self.analysisEngine.process(frame)
-                self.frameStore.update(visualFrame)
+    private func drainPendingFrames() {
+        while let frame = takePendingFrame() {
+            let visualFrame = analysisEngine.process(frame)
+            frameStore.update(visualFrame)
 
-                let now = CACurrentMediaTime()
-                if now - self.lastUIPublish > 1.0 / 20.0 {
-                    self.lastUIPublish = now
-                    DispatchQueue.main.async {
-                        self.onFrame?(visualFrame)
-                    }
+            let now = CACurrentMediaTime()
+            if now - lastUIPublish > 1.0 / 20.0 {
+                lastUIPublish = now
+                DispatchQueue.main.async { [weak self] in
+                    self?.onFrame?(visualFrame)
                 }
             }
-
-            self.isProcessing = false
         }
+    }
+
+    private func takePendingFrame() -> AudioBufferFrame? {
+        stateLock.lock()
+        let frame = pendingFrame
+        pendingFrame = nil
+        if frame == nil {
+            drainScheduled = false
+        }
+        stateLock.unlock()
+        return frame
     }
 }
 
