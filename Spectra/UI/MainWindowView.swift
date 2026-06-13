@@ -26,6 +26,10 @@ struct MainWindowView: View {
                     noAudioState
                 }
                 Spacer()
+                PresetShelfView()
+                    .frame(maxWidth: 1040)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
                 ControlPanelView()
                     .frame(maxWidth: 1040)
                     .padding(.horizontal, 18)

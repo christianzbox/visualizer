@@ -21,6 +21,52 @@ private struct FractalUniforms {
     var palette: UInt32
 }
 
+private struct RenderSignalState {
+    private var volume = AttackReleaseEnvelope(initialValue: 0, attack: 0.16, release: 0.92)
+    private var bass = AttackReleaseEnvelope(initialValue: 0, attack: 0.13, release: 0.94)
+    private var mid = AttackReleaseEnvelope(initialValue: 0, attack: 0.20, release: 0.92)
+    private var highMid = AttackReleaseEnvelope(initialValue: 0, attack: 0.22, release: 0.90)
+    private var treble = AttackReleaseEnvelope(initialValue: 0, attack: 0.28, release: 0.88)
+    private var beat = AttackReleaseEnvelope(initialValue: 0, attack: 0.08, release: 0.78)
+    private var onset = AttackReleaseEnvelope(initialValue: 0, attack: 0.10, release: 0.82)
+    private(set) var visualTime: Float = 0
+
+    mutating func process(
+        _ frame: VisualAudioFrame,
+        settings: PresetSettings,
+        deltaTime: TimeInterval
+    ) -> VisualAudioFrame {
+        let motion = settings.reduceMotion ? Float(0.08) : Float(settings.motionAmount)
+        let smoothedVolume = volume.process(max(frame.smoothedVolume, frame.rms * 2.0), deltaTime: deltaTime)
+        let smoothedBass = bass.process(max(frame.smoothedBass, frame.bassEnergy), deltaTime: deltaTime)
+        let smoothedMid = mid.process(frame.midEnergy, deltaTime: deltaTime)
+        let smoothedHighMid = highMid.process(frame.highMidEnergy, deltaTime: deltaTime)
+        let smoothedTreble = treble.process(max(frame.smoothedTreble, frame.trebleEnergy), deltaTime: deltaTime)
+        let beatTrail = beat.process(max(frame.beatPulse, frame.onsetStrength * 0.42), deltaTime: deltaTime)
+        let onsetTrail = onset.process(frame.onsetStrength, deltaTime: deltaTime)
+
+        visualTime += Float(deltaTime) * (
+            0.42
+            + motion * 0.30
+            + smoothedVolume * 0.26
+            + smoothedBass * 0.18
+            + beatTrail * 0.20
+        )
+
+        var output = frame
+        output.smoothedVolume = min(1, smoothedVolume)
+        output.bassEnergy = min(1, smoothedBass)
+        output.smoothedBass = min(1, smoothedBass)
+        output.midEnergy = min(1, smoothedMid)
+        output.highMidEnergy = min(1, smoothedHighMid)
+        output.trebleEnergy = min(1, smoothedTreble)
+        output.smoothedTreble = min(1, smoothedTreble)
+        output.beatPulse = min(1, beatTrail)
+        output.onsetStrength = min(1, onsetTrail)
+        return output
+    }
+}
+
 final class MetalRenderer: NSObject, MTKViewDelegate {
     private let frameStore: VisualFrameStore
     private var presetProvider: () -> VisualPresetID
@@ -35,6 +81,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var lastFrameTime = CACurrentMediaTime()
     private var fpsSampleStart = CACurrentMediaTime()
     private var fpsFrameCount = 0
+    private var renderSignalState = RenderSignalState()
     private var reusableVertices: [SpectraVertex] = []
     private var vertexBuffer: MTLBuffer?
     private var vertexCapacity = 0
@@ -87,10 +134,13 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             return
         }
 
-        let frame = frameStore.read()
+        let now = CACurrentMediaTime()
+        let deltaTime = max(1.0 / 120.0, min(1.0 / 20.0, now - lastFrameTime))
+        let rawFrame = frameStore.read()
         let settings = settingsProvider()
         let preset = presetProvider()
-        let time = Float(CACurrentMediaTime() - startTime)
+        let frame = renderSignalState.process(rawFrame, settings: settings, deltaTime: deltaTime)
+        let time = renderSignalState.visualTime + Float(now - startTime) * 0.10
         let isFractal = preset.isFractal
         reusableVertices.removeAll(keepingCapacity: true)
         appendVertices(
@@ -101,6 +151,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             time: time,
             drawableSize: view.drawableSize
         )
+        if !isFractal {
+            applyTraversalTransform(to: &reusableVertices, frame: frame, settings: settings, time: time)
+        }
         guard let pipelineState = isFractal ? fractalPipelineState : geometryPipelineState else { return }
 
         let clear = backgroundColor(for: settings.palette, frame: frame)
@@ -144,7 +197,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         commandBuffer.commit()
 
         updateFPS()
-        lastFrameTime = CACurrentMediaTime()
+        lastFrameTime = now
     }
 
     private func makeShaderLibrary(for view: MTKView) -> MTLLibrary? {
@@ -676,6 +729,31 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 colorA: color,
                 colorB: colorB
             )
+        }
+    }
+
+    private func applyTraversalTransform(
+        to vertices: inout [SpectraVertex],
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float
+    ) {
+        guard !vertices.isEmpty else { return }
+
+        let motion = settings.reduceMotion ? Float(0.05) : Float(settings.motionAmount)
+        let scale = 1
+            + frame.smoothedBass * 0.018
+            + frame.beatPulse * 0.012
+            + frame.smoothedVolume * 0.006
+        let rotation = sin(time * 0.18 + frame.midEnergy * 0.70) * 0.018 * motion
+        let offset = SIMD2<Float>(
+            sin(time * 0.13) * 0.020 * motion + sin(time * 0.41) * frame.highMidEnergy * 0.006,
+            cos(time * 0.11) * 0.016 * motion + frame.smoothedBass * 0.008
+        )
+
+        for index in vertices.indices {
+            let position = vertices[index].position * scale
+            vertices[index].position = rotatePoint(position, rotation) + offset
         }
     }
 

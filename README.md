@@ -8,6 +8,7 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 - Metal-backed visualizer view.
 - Ten working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, plus five true iterative fractal presets.
 - Cinematic render layers: ambient wash, reflections, waveform veils, galaxy arms, tunnel rays, fractal filaments, and transient sparkle mapped to real audio features.
+- Main-window preset shelf for direct preset changes without opening Settings.
 - Test Signal Mode with sine, bass pulse, noise, and fake beat pattern.
 - Accelerate/vDSP FFT analysis with adaptive band normalization, onset/beat detection, smoothing, silence detection, and level metering.
 - ScreenCaptureKit system mix and experimental app-source capture backend.
@@ -66,7 +67,7 @@ Privacy text shown by the app:
 3. Switch Capture Mode to System Mix to capture Mac output.
 4. Grant Screen & System Audio Recording permission if macOS prompts, then refresh sources.
 5. Play audio in any app.
-6. Switch between Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, and the fractal family.
+6. Switch presets from the main-window preset shelf.
 7. Fractal choices are real formulas: Mandelbrot, Julia, Burning Ship, Tricorn, and Phoenix.
 8. Use the full-screen button or standard macOS full-screen controls.
 9. Adjust sensitivity, intensity, palette, motion, glow, and beat response, or pin the window as floating.

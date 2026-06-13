@@ -25,9 +25,6 @@ struct ControlPanelView: View {
             LevelMeterView(frame: appState.latestFrame)
                 .frame(width: 132)
 
-            PresetPickerView()
-                .frame(width: 208)
-
             sliderStack
             .frame(width: 220)
 
@@ -46,9 +43,6 @@ struct ControlPanelView: View {
             HStack(spacing: 14) {
                 LevelMeterView(frame: appState.latestFrame)
                     .frame(width: 132)
-
-                PresetPickerView()
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             sliderStack

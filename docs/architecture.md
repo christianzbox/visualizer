@@ -17,7 +17,7 @@ Spectra is split into a reusable core target and a macOS executable target.
 
 - `AppState`: owns settings, capture engine selection, analysis queue, UI frame throttling, and renderer handoff.
 - `VisualFrameStore`: lock-protected latest-frame handoff from analysis to Metal.
-- SwiftUI views: visual area, source/status, grouped preset picker, responsive controls, settings, debug overlay.
+- SwiftUI views: visual area, source/status, main-window preset shelf, grouped preset picker, responsive controls, settings, debug overlay.
 - `MetalRenderer`: builds geometry presets from the latest `VisualAudioFrame` using a reusable vertex array and grow-only Metal buffer. Fractal presets use a separate full-screen Metal fragment pipeline with shared audio uniforms.
 
 ## Threading
@@ -37,7 +37,7 @@ The capture callback only hands buffers to an analysis queue. Analysis produces 
 - Tricorn Pulse: conjugate quadratic recurrence driven by mids and beat pressure.
 - Phoenix Field: feedback recurrence with treble detail and bass expansion.
 
-All visual presets use the same `VisualAudioFrame` features rather than independent random animation. Slow values such as smoothed volume and bass drive scale and bloom; onset and beat drive transient expansion; treble drives shimmer and fine detail.
+All visual presets use the same `VisualAudioFrame` features rather than independent random animation. Renderer-side display smoothing keeps audio motion stable at 60 FPS. Slow values such as smoothed volume and bass drive scale, bloom, and traversal; onset and beat drive transient expansion; treble drives shimmer and fine detail.
 
 ## Test Strategy
 
