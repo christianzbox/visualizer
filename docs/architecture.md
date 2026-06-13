@@ -36,8 +36,11 @@ The capture callback only hands buffers to an analysis queue. Analysis produces 
 - Burning Ship: rectified complex recurrence with low-frequency expansion.
 - Tricorn Pulse: conjugate quadratic recurrence driven by mids and beat pressure.
 - Phoenix Field: feedback recurrence with treble detail and bass expansion.
+- Mandelbox Flight: folded-space volumetric fractal traversal.
+- Terrain Flight: procedural heightfield flyover with audio-reactive horizon, fog, and terrain light.
+- Nebula Voyage: volumetric tunnel journey with nebula bands and transient star dust.
 
-All visual presets use the same `VisualAudioFrame` features rather than independent random animation. Renderer-side display smoothing keeps audio motion stable at 60 FPS. Slow values such as smoothed volume and bass drive scale, bloom, and traversal; onset and beat drive transient expansion; treble drives shimmer and fine detail.
+All visual presets use the same `VisualAudioFrame` features rather than independent random animation. Renderer-side display smoothing keeps audio motion stable at 60 FPS. Slow values such as smoothed volume and bass drive scale, bloom, camera speed, and traversal; onset and beat drive transient expansion; treble drives shimmer, terrain detail, and star dust.
 
 ## Test Strategy
 

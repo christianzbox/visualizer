@@ -70,6 +70,27 @@ public enum PresetCatalog {
             description: "Phoenix fractal field with memory feedback mapped to treble detail and bass expansion.",
             category: .fractal,
             defaultSettings: PresetSettings(intensity: 0.80, sensitivity: 0.74, palette: .aurora, motionAmount: 0.60, glowAmount: 0.70, beatReactivity: 0.84)
+        ),
+        VisualPresetDescriptor(
+            id: .mandelboxFlight,
+            name: VisualPresetID.mandelboxFlight.name,
+            description: "Folded-space fractal traversal with bass-driven depth and treble-lit crystalline edges.",
+            category: .fractal,
+            defaultSettings: PresetSettings(intensity: 0.86, sensitivity: 0.76, palette: .prism, motionAmount: 0.72, glowAmount: 0.76, beatReactivity: 0.88)
+        ),
+        VisualPresetDescriptor(
+            id: .terrainFlight,
+            name: VisualPresetID.terrainFlight.name,
+            description: "Procedural cinematic landscape flight with audio-reactive horizon, fog, and terrain light.",
+            category: .journey,
+            defaultSettings: PresetSettings(intensity: 0.82, sensitivity: 0.72, palette: .aurora, motionAmount: 0.80, glowAmount: 0.66, beatReactivity: 0.78)
+        ),
+        VisualPresetDescriptor(
+            id: .nebulaVoyage,
+            name: VisualPresetID.nebulaVoyage.name,
+            description: "Volumetric tunnel voyage with flowing nebula bands, star dust, and beat-reactive forward motion.",
+            category: .journey,
+            defaultSettings: PresetSettings(intensity: 0.84, sensitivity: 0.74, palette: .magma, motionAmount: 0.86, glowAmount: 0.78, beatReactivity: 0.86)
         )
     ]
 

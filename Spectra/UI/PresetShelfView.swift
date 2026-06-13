@@ -71,6 +71,12 @@ struct PresetShelfView: View {
             return "triangle.fill"
         case .phoenixField:
             return "point.3.connected.trianglepath.dotted"
+        case .mandelboxFlight:
+            return "cube.transparent"
+        case .terrainFlight:
+            return "mountain.2.fill"
+        case .nebulaVoyage:
+            return "sparkle.magnifyingglass"
         }
     }
 }

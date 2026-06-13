@@ -11,6 +11,9 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
     case burningShip
     case tricornPulse
     case phoenixField
+    case mandelboxFlight
+    case terrainFlight
+    case nebulaVoyage
 
     public var id: String { rawValue }
 
@@ -26,6 +29,9 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .burningShip: return "Burning Ship"
         case .tricornPulse: return "Tricorn Pulse"
         case .phoenixField: return "Phoenix Field"
+        case .mandelboxFlight: return "Mandelbox Flight"
+        case .terrainFlight: return "Terrain Flight"
+        case .nebulaVoyage: return "Nebula Voyage"
         }
     }
 
@@ -36,13 +42,25 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .burningShip: return 2
         case .tricornPulse: return 3
         case .phoenixField: return 4
+        case .mandelboxFlight: return 5
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .nebulaVoyage:
+            return nil
+        }
+    }
+
+    public var fullscreenShaderMode: Int? {
+        switch self {
+        case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight:
+            return fractalMode
+        case .terrainFlight: return 6
+        case .nebulaVoyage: return 7
         case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform:
             return nil
         }
     }
 
-    public var isFractal: Bool {
-        fractalMode != nil
+    public var usesFullscreenShader: Bool {
+        fullscreenShaderMode != nil
     }
 }
 
@@ -52,6 +70,7 @@ public enum VisualPresetCategory: String, Codable, CaseIterable, Identifiable, S
     case particles
     case ambient
     case fractal
+    case journey
 
     public var id: String { rawValue }
 
@@ -62,6 +81,7 @@ public enum VisualPresetCategory: String, Codable, CaseIterable, Identifiable, S
         case .particles: return "Particles"
         case .ambient: return "Ambient"
         case .fractal: return "Fractals"
+        case .journey: return "Journeys"
         }
     }
 }
