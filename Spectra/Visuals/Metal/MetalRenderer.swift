@@ -217,25 +217,50 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let intensity = Float(settings.intensity)
         let beat = frame.beatPulse * Float(settings.beatReactivity)
         let palette = paletteColors(settings.palette)
-        vertices.reserveCapacity(count * 12)
+        vertices.reserveCapacity(count * 18 + 160)
+        appendCinematicBackdrop(into: &vertices, frame: frame, settings: settings, time: time, palette: palette)
 
         for index in 0..<count {
             let x0 = -0.94 + (Float(index) / Float(count)) * 1.88
             let x1 = -0.94 + (Float(index + 1) / Float(count)) * 1.88 - 0.006
-            let energy = pow(min(1, bands[index] * sensitivity * 1.45), 0.72)
-            let height = max(0.018, energy * 1.38 * intensity)
+            let position = Float(index) / Float(max(1, count - 1))
+            let energy = pow(min(1, bands[index] * sensitivity * 1.58), 0.66)
+            let orchestralLift = 0.08 * frame.midEnergy + 0.04 * frame.highMidEnergy
+            let height = max(0.018, energy * 1.34 * intensity + orchestralLift)
             let y0: Float = -0.78
-            let y1 = min(0.88, y0 + height + beat * 0.08)
-            let shimmer = 0.06 * sin(time * 3.2 + Float(index) * 0.37) * frame.trebleEnergy
-            let color = mix(palette.0, palette.1, Float(index) / Float(count))
+            let y1 = min(0.90, y0 + height + beat * 0.07)
+            let shimmer = 0.08 * sin(time * 2.4 + Float(index) * 0.41) * frame.trebleEnergy
+            let color = mix(mix(palette.0, palette.1, position), palette.2, pow(position, 2.0) * 0.45)
             let topColor = SIMD4<Float>(
-                min(1, color.x + 0.18 + shimmer),
-                min(1, color.y + 0.12),
-                min(1, color.z + 0.22),
-                0.84
+                min(1, color.x + 0.20 + shimmer),
+                min(1, color.y + 0.14 + shimmer * 0.35),
+                min(1, color.z + 0.24),
+                0.88
             )
-            let bottomColor = SIMD4<Float>(color.x * 0.36, color.y * 0.36, color.z * 0.42, 0.78)
+            let bottomColor = SIMD4<Float>(color.x * 0.30, color.y * 0.34, color.z * 0.42, 0.74)
             appendQuad(&vertices, x0: x0, y0: y0, x1: x1, y1: y1, bottom: bottomColor, top: topColor)
+
+            let cap = 0.004 + energy * 0.006 + frame.trebleEnergy * 0.003
+            appendQuad(
+                &vertices,
+                x0: x0 - 0.002,
+                y0: y1,
+                x1: x1 + 0.002,
+                y1: min(0.94, y1 + cap),
+                bottom: SIMD4<Float>(min(1, color.x + 0.20), min(1, color.y + 0.18), min(1, color.z + 0.26), 0.68),
+                top: SIMD4<Float>(1, 1, 1, 0.26 + frame.trebleEnergy * 0.18)
+            )
+
+            let reflection = min(0.36, height * (0.18 + frame.smoothedVolume * 0.28))
+            appendQuad(
+                &vertices,
+                x0: x0 + 0.001,
+                y0: max(-0.98, y0 - reflection - 0.025),
+                x1: x1 - 0.001,
+                y1: y0 - 0.018,
+                bottom: SIMD4<Float>(color.x, color.y, color.z, 0.01),
+                top: SIMD4<Float>(color.x, color.y, color.z, 0.10 + beat * 0.08)
+            )
 
             if frame.bassEnergy > 0.03 {
                 let glow = min(0.22, frame.bassEnergy * 0.22 + beat * 0.16)
@@ -257,36 +282,46 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let palette = paletteColors(settings.palette)
         let sensitivity = Float(settings.sensitivity)
         let intensity = Float(settings.intensity)
-        let thickness = 0.012 + frame.smoothedBass * 0.038 * intensity
         let count = min(180, waveform.count)
-        vertices.reserveCapacity(max(0, (count - 1) * 6))
+        vertices.reserveCapacity(max(0, (count - 1) * 20) + 140)
+        appendCinematicBackdrop(into: &vertices, frame: frame, settings: settings, time: time, palette: palette)
 
-        for index in 0..<(count - 1) {
-            let t0 = Float(index) / Float(count - 1)
-            let t1 = Float(index + 1) / Float(count - 1)
-            let x0 = -0.92 + t0 * 1.84
-            let x1 = -0.92 + t1 * 1.84
-            let wave0 = waveform[index] * sensitivity * 0.56
-            let wave1 = waveform[index + 1] * sensitivity * 0.56
-            let liquid0 = sin((t0 * 9.0) + time * 0.9) * frame.bassEnergy * 0.05
-            let liquid1 = sin((t1 * 9.0) + time * 0.9) * frame.bassEnergy * 0.05
-            let y0 = wave0 + liquid0
-            let y1 = wave1 + liquid1
-            let color = mix(palette.1, palette.2, t0)
-            let alpha = 0.60 + frame.smoothedVolume * 0.28
-            let topColor = SIMD4<Float>(color.x, color.y, color.z, alpha)
-            let bottomColor = SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, alpha * 0.65)
+        for layer in 0..<3 {
+            let layerDepth = Float(layer)
+            let amplitude = sensitivity * (0.58 - layerDepth * 0.12)
+            let thickness = (0.010 + frame.smoothedBass * 0.040 * intensity) * (1.0 + layerDepth * 0.62)
+            let verticalOffset = (layerDepth - 1.0) * (0.034 + frame.midEnergy * 0.030)
+            let phase = time * (0.55 + layerDepth * 0.16)
+            let alphaBase = (0.66 - layerDepth * 0.18) + frame.smoothedVolume * 0.22
 
-            appendRibbonSegment(
-                &vertices,
-                x0: x0,
-                y0: y0,
-                x1: x1,
-                y1: y1,
-                halfThickness: thickness,
-                colorA: bottomColor,
-                colorB: topColor
-            )
+            for index in 0..<(count - 1) {
+                let t0 = Float(index) / Float(count - 1)
+                let t1 = Float(index + 1) / Float(count - 1)
+                let x0 = -0.92 + t0 * 1.84
+                let x1 = -0.92 + t1 * 1.84
+                let wave0 = waveform[index] * amplitude
+                let wave1 = waveform[index + 1] * amplitude
+                let liquid0 = sin((t0 * 7.0) + phase) * frame.bassEnergy * 0.045
+                    + sin((t0 * 18.0) - time * 0.32) * frame.trebleEnergy * 0.012
+                let liquid1 = sin((t1 * 7.0) + phase) * frame.bassEnergy * 0.045
+                    + sin((t1 * 18.0) - time * 0.32) * frame.trebleEnergy * 0.012
+                let y0 = wave0 + liquid0 + verticalOffset
+                let y1 = wave1 + liquid1 + verticalOffset
+                let color = mix(mix(palette.0, palette.1, t0), palette.2, 0.35 + layerDepth * 0.18)
+                let topColor = SIMD4<Float>(min(1, color.x + 0.10), min(1, color.y + 0.08), min(1, color.z + 0.14), alphaBase)
+                let bottomColor = SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, alphaBase * (0.42 + layerDepth * 0.08))
+
+                appendRibbonSegment(
+                    &vertices,
+                    x0: x0,
+                    y0: y0,
+                    x1: x1,
+                    y1: y1,
+                    halfThickness: thickness,
+                    colorA: bottomColor,
+                    colorB: topColor
+                )
+            }
         }
 
         let pulse = frame.beatPulse * 0.24
@@ -303,26 +338,39 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     private func particleGalaxy(into vertices: inout [SpectraVertex], frame: VisualAudioFrame, settings: PresetSettings, time: Float) {
         let palette = paletteColors(settings.palette)
-        let particleCount = 380
+        let particleCount = 560
         let sensitivity = Float(settings.sensitivity)
         let intensity = Float(settings.intensity)
         let beat = frame.beatPulse * Float(settings.beatReactivity)
         let motion = settings.reduceMotion ? Float(0.18) : Float(settings.motionAmount)
-        vertices.reserveCapacity(particleCount * 6)
+        vertices.reserveCapacity(particleCount * 6 + 1_900)
+        appendCinematicBackdrop(into: &vertices, frame: frame, settings: settings, time: time, palette: palette)
+
+        for arm in 0..<3 {
+            appendSpiralArm(
+                into: &vertices,
+                frame: frame,
+                palette: palette,
+                time: time,
+                armOffset: Float(arm) * Float.pi * 2 / 3,
+                motion: motion,
+                intensity: intensity
+            )
+        }
 
         for index in 0..<particleCount {
             let seed = Float(index)
             let ring = fract(sin(seed * 12.9898) * 43_758.5453)
             let angleSeed = fract(sin(seed * 78.233) * 18_234.123)
-            let radius = 0.08 + pow(ring, 0.62) * (0.76 + frame.bassEnergy * 0.28 + beat * 0.22)
-            let angle = angleSeed * Float.pi * 2 + time * (0.04 + motion * 0.16) * (0.4 + ring)
-            let spiral = frame.midEnergy * 0.22 * sin(time * 0.7 + seed * 0.13)
+            let radius = 0.06 + pow(ring, 0.58) * (0.82 + frame.bassEnergy * 0.32 + beat * 0.24)
+            let angle = angleSeed * Float.pi * 2 + time * (0.035 + motion * 0.14) * (0.4 + ring)
+            let spiral = frame.midEnergy * 0.30 * sin(time * 0.58 + seed * 0.13) + frame.highMidEnergy * 0.10
             let x = cos(angle + spiral) * radius
             let y = sin(angle + spiral) * radius * 0.78
-            let shimmer = 0.35 + frame.trebleEnergy * sensitivity * fract(sin(seed * 91.7 + time * 5.0) * 111.1)
-            let size = (0.0035 + ring * 0.006 + beat * 0.006) * (0.75 + intensity)
-            let color = mix(palette.0, palette.2, ring)
-            let alpha = min(0.86, 0.16 + shimmer * 0.52 + frame.smoothedVolume * 0.22)
+            let shimmer = 0.26 + frame.trebleEnergy * sensitivity * fract(sin(seed * 91.7 + time * 3.6) * 111.1)
+            let size = (0.0026 + ring * 0.0065 + beat * 0.006 + frame.onsetStrength * 0.003) * (0.72 + intensity)
+            let color = mix(mix(palette.0, palette.1, ring), palette.2, pow(ring, 1.8))
+            let alpha = min(0.90, 0.12 + shimmer * 0.52 + frame.smoothedVolume * 0.24)
             appendQuad(
                 &vertices,
                 x0: x - size,
@@ -334,7 +382,18 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             )
         }
 
-        let core = 0.06 + frame.smoothedBass * 0.22 + beat * 0.16
+        appendEllipseRibbon(
+            &vertices,
+            radiusX: 0.28 + frame.midEnergy * 0.08,
+            radiusY: 0.18 + frame.midEnergy * 0.05,
+            rotation: time * (0.08 + motion * 0.18),
+            segments: 96,
+            halfThickness: 0.0025 + frame.trebleEnergy * 0.004,
+            colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.20 + frame.midEnergy * 0.16),
+            colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.12 + frame.trebleEnergy * 0.18)
+        )
+
+        let core = 0.06 + frame.smoothedBass * 0.24 + beat * 0.18
         appendQuad(
             &vertices,
             x0: -core,
@@ -342,7 +401,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             x1: core,
             y1: core,
             bottom: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.08),
-            top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.34)
+            top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.38 + beat * 0.18)
         )
     }
 
@@ -352,15 +411,16 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let segmentCount = 88
         let beat = frame.beatPulse * Float(settings.beatReactivity)
         let motion = settings.reduceMotion ? Float(0.12) : Float(settings.motionAmount)
-        vertices.reserveCapacity(ringCount * segmentCount * 6)
+        vertices.reserveCapacity(ringCount * segmentCount * 6 + 260)
+        appendCinematicBackdrop(into: &vertices, frame: frame, settings: settings, time: time, palette: palette)
 
         for ring in 0..<ringCount {
             let depth = Float(ring) / Float(ringCount)
-            let radius = 0.08 + pow(depth, 1.35) * (1.14 + beat * 0.24)
-            let twist = time * (0.22 + motion * 0.5) + depth * 3.4 + frame.smoothedBass * 0.35
-            let width = 0.0028 + (1 - depth) * 0.005 + frame.trebleEnergy * 0.004
-            let color = mix(palette.0, palette.2, depth)
-            let alpha = (1 - depth) * 0.42 + frame.smoothedVolume * 0.18
+            let radius = 0.06 + pow(depth, 1.32) * (1.18 + beat * 0.26 + frame.smoothedBass * 0.10)
+            let twist = time * (0.18 + motion * 0.45) + depth * 3.65 + frame.smoothedBass * 0.38 + frame.midEnergy * 0.14
+            let width = 0.0026 + (1 - depth) * 0.0055 + frame.trebleEnergy * 0.0045
+            let color = mix(mix(palette.0, palette.1, depth), palette.2, pow(depth, 1.5) * 0.48)
+            let alpha = (1 - depth) * 0.40 + frame.smoothedVolume * 0.18 + beat * 0.08
 
             for segment in stride(from: 0, to: segmentCount, by: 2) {
                 let t0 = Float(segment) / Float(segmentCount) * Float.pi * 2
@@ -381,6 +441,23 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 )
             }
         }
+
+        for ray in 0..<24 {
+            let angle = Float(ray) / 24 * Float.pi * 2 + time * (0.08 + motion * 0.14)
+            let inner = 0.08 + frame.smoothedBass * 0.05
+            let outer = 1.24 + beat * 0.14
+            let color = mix(palette.1, palette.2, Float(ray % 6) / 5)
+            appendRibbonSegment(
+                &vertices,
+                x0: cos(angle) * inner,
+                y0: sin(angle) * inner * 0.72,
+                x1: cos(angle + frame.midEnergy * 0.08) * outer,
+                y1: sin(angle + frame.midEnergy * 0.08) * outer * 0.72,
+                halfThickness: 0.0016 + frame.trebleEnergy * 0.0018,
+                colorA: SIMD4<Float>(color.x, color.y, color.z, 0.14 + beat * 0.10),
+                colorB: SIMD4<Float>(color.x, color.y, color.z, 0.01)
+            )
+        }
     }
 
     private func minimalWaveform(into vertices: inout [SpectraVertex], frame: VisualAudioFrame, settings: PresetSettings, time: Float) {
@@ -389,7 +466,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let count = min(150, waveform.count)
         let sensitivity = Float(settings.sensitivity) * 0.36
         let thickness: Float = 0.006 + frame.smoothedVolume * 0.012
-        vertices.reserveCapacity(max(0, (count - 1) * 6) + 12)
+        vertices.reserveCapacity(max(0, (count - 1) * 18) + 80)
+        appendCinematicBackdrop(into: &vertices, frame: frame, settings: settings, time: time, palette: palette)
 
         appendQuad(
             &vertices,
@@ -401,26 +479,31 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.18)
         )
 
-        for index in 0..<(count - 1) {
-            let t0 = Float(index) / Float(count - 1)
-            let t1 = Float(index + 1) / Float(count - 1)
-            let x0 = -0.86 + t0 * 1.72
-            let x1 = -0.86 + t1 * 1.72
-            let drift0 = sin(time * 0.45 + t0 * 5.2) * frame.smoothedBass * 0.02
-            let drift1 = sin(time * 0.45 + t1 * 5.2) * frame.smoothedBass * 0.02
-            let y0 = waveform[index] * sensitivity + drift0
-            let y1 = waveform[index + 1] * sensitivity + drift1
-            let color = mix(palette.1, palette.2, t0)
-            appendRibbonSegment(
-                &vertices,
-                x0: x0,
-                y0: y0,
-                x1: x1,
-                y1: y1,
-                halfThickness: thickness,
-                colorA: SIMD4<Float>(color.x, color.y, color.z, 0.48),
-                colorB: SIMD4<Float>(min(1, color.x + 0.12), min(1, color.y + 0.12), min(1, color.z + 0.12), 0.62)
-            )
+        for layer in 0..<2 {
+            let offset = Float(layer) == 0 ? Float(0) : sin(time * 0.28) * frame.smoothedBass * 0.035
+            let alpha = Float(layer) == 0 ? Float(0.62) : Float(0.24 + frame.midEnergy * 0.18)
+            let layerThickness = thickness * (Float(layer) == 0 ? 1.0 : 1.9)
+            for index in 0..<(count - 1) {
+                let t0 = Float(index) / Float(count - 1)
+                let t1 = Float(index + 1) / Float(count - 1)
+                let x0 = -0.86 + t0 * 1.72
+                let x1 = -0.86 + t1 * 1.72
+                let drift0 = sin(time * 0.45 + t0 * 5.2) * frame.smoothedBass * 0.02
+                let drift1 = sin(time * 0.45 + t1 * 5.2) * frame.smoothedBass * 0.02
+                let y0 = waveform[index] * sensitivity + drift0 + offset
+                let y1 = waveform[index + 1] * sensitivity + drift1 + offset
+                let color = mix(palette.1, palette.2, t0)
+                appendRibbonSegment(
+                    &vertices,
+                    x0: x0,
+                    y0: y0,
+                    x1: x1,
+                    y1: y1,
+                    halfThickness: layerThickness,
+                    colorA: SIMD4<Float>(color.x, color.y, color.z, alpha * 0.72),
+                    colorB: SIMD4<Float>(min(1, color.x + 0.12), min(1, color.y + 0.12), min(1, color.z + 0.12), alpha)
+                )
+            }
         }
     }
 
@@ -466,6 +549,134 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             mode: mode,
             palette: paletteIndex(settings.palette)
         )
+    }
+
+    private func appendCinematicBackdrop(
+        into vertices: inout [SpectraVertex],
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>)
+    ) {
+        let motion = settings.reduceMotion ? Float(0.08) : Float(settings.motionAmount)
+        let glow = Float(settings.glowAmount)
+        let volume = min(1, frame.smoothedVolume * 1.15 + frame.midEnergy * 0.28)
+        let bass = min(1, frame.smoothedBass * 1.18 + frame.subBassEnergy * 0.20)
+        let treble = min(1, frame.trebleEnergy * 1.12)
+        let beat = min(1, frame.beatPulse * Float(settings.beatReactivity))
+        let drift = sin(time * (0.18 + motion * 0.20)) * 0.035 * motion
+        let horizon = -0.34 + bass * 0.10 + drift
+
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -1,
+            x1: 1,
+            y1: 1,
+            bottom: SIMD4<Float>(palette.0.x * 0.42, palette.0.y * 0.42, palette.0.z * 0.50, 0.08 + bass * 0.12 + beat * 0.06),
+            top: SIMD4<Float>(palette.2.x * 0.26, palette.2.y * 0.24, palette.2.z * 0.32, 0.04 + volume * 0.10)
+        )
+
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: horizon - 0.13,
+            x1: 1,
+            y1: horizon + 0.13,
+            bottom: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.04),
+            top: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.16 + volume * 0.20 + glow * 0.06)
+        )
+
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -1,
+            x1: 1,
+            y1: -0.64 + bass * 0.08,
+            bottom: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.12 + bass * 0.16),
+            top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.02 + beat * 0.06)
+        )
+
+        let glintY = 0.58 + sin(time * 0.13) * 0.05
+        appendRibbonSegment(
+            &vertices,
+            x0: -0.82,
+            y0: glintY,
+            x1: 0.82,
+            y1: glintY + sin(time * 0.21) * 0.025,
+            halfThickness: 0.0018 + treble * 0.004,
+            colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.04 + treble * 0.12),
+            colorB: SIMD4<Float>(1, 1, 1, 0.04 + treble * 0.10)
+        )
+    }
+
+    private func appendSpiralArm(
+        into vertices: inout [SpectraVertex],
+        frame: VisualAudioFrame,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        time: Float,
+        armOffset: Float,
+        motion: Float,
+        intensity: Float
+    ) {
+        let segments = 96
+        let beat = frame.beatPulse
+        let bass = frame.smoothedBass
+        let mid = frame.midEnergy
+        let treble = frame.trebleEnergy
+        for segment in 0..<segments {
+            let t0 = Float(segment) / Float(segments)
+            let t1 = Float(segment + 1) / Float(segments)
+            let radius0 = 0.08 + pow(t0, 0.72) * (0.86 + bass * 0.28 + beat * 0.16)
+            let radius1 = 0.08 + pow(t1, 0.72) * (0.86 + bass * 0.28 + beat * 0.16)
+            let angle0 = armOffset + t0 * Float.pi * 3.4 + time * (0.035 + motion * 0.09) + mid * 0.28
+            let angle1 = armOffset + t1 * Float.pi * 3.4 + time * (0.035 + motion * 0.09) + mid * 0.28
+            let x0 = cos(angle0) * radius0
+            let y0 = sin(angle0) * radius0 * 0.72
+            let x1 = cos(angle1) * radius1
+            let y1 = sin(angle1) * radius1 * 0.72
+            let color = mix(palette.0, palette.2, t0)
+            appendRibbonSegment(
+                &vertices,
+                x0: x0,
+                y0: y0,
+                x1: x1,
+                y1: y1,
+                halfThickness: (0.0022 + treble * 0.0045 + beat * 0.002) * (0.72 + intensity),
+                colorA: SIMD4<Float>(color.x, color.y, color.z, 0.10 + (1 - t0) * 0.18),
+                colorB: SIMD4<Float>(min(1, color.x + 0.18), min(1, color.y + 0.18), min(1, color.z + 0.18), 0.05 + (1 - t1) * 0.14)
+            )
+        }
+    }
+
+    private func appendEllipseRibbon(
+        _ vertices: inout [SpectraVertex],
+        radiusX: Float,
+        radiusY: Float,
+        rotation: Float,
+        segments: Int,
+        halfThickness: Float,
+        colorA: SIMD4<Float>,
+        colorB: SIMD4<Float>
+    ) {
+        guard segments > 2 else { return }
+        for segment in 0..<segments {
+            let t0 = Float(segment) / Float(segments) * Float.pi * 2
+            let t1 = Float(segment + 1) / Float(segments) * Float.pi * 2
+            let p0 = rotatePoint(SIMD2<Float>(cos(t0) * radiusX, sin(t0) * radiusY), rotation)
+            let p1 = rotatePoint(SIMD2<Float>(cos(t1) * radiusX, sin(t1) * radiusY), rotation)
+            let color = segment.isMultiple(of: 2) ? colorA : colorB
+            appendRibbonSegment(
+                &vertices,
+                x0: p0.x,
+                y0: p0.y,
+                x1: p1.x,
+                y1: p1.y,
+                halfThickness: halfThickness,
+                colorA: color,
+                colorB: colorB
+            )
+        }
     }
 
     private func ensureVertexBuffer(device: MTLDevice, vertexCount: Int) -> MTLBuffer? {
@@ -570,6 +781,15 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         a + (b - a) * min(1, max(0, t))
     }
 
+    private func rotatePoint(_ value: SIMD2<Float>, _ angle: Float) -> SIMD2<Float> {
+        let sine = sin(angle)
+        let cosine = cos(angle)
+        return SIMD2<Float>(
+            value.x * cosine - value.y * sine,
+            value.x * sine + value.y * cosine
+        )
+    }
+
     private func fract(_ value: Float) -> Float {
         value - floor(value)
     }
@@ -655,8 +875,33 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         return lerp3(low, high, smoothstep(0.08, 0.92, t));
     }
 
+    float hash21(float2 p) {
+        p = fract(p * float2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+    }
+
+    float spectralFilament(float2 point, constant FractalUniforms &u) {
+        float radius = length(point);
+        float angle = atan2(point.y, point.x);
+        float tempo = u.time * (0.16 + u.motion * 0.42);
+        float bassFold = sin(radius * (8.0 + u.bass * 8.0) - tempo * 3.2 + u.beat * 1.8);
+        float midFold = sin(angle * (3.0 + u.mid * 4.0) + radius * 15.0 + tempo * 2.1);
+        float trebleFold = sin(radius * 42.0 - angle * 5.0 + tempo * 5.8);
+        float filament = bassFold * 0.46 + midFold * 0.36 + trebleFold * u.treble * 0.28;
+        return smoothstep(0.72, 1.0, filament) * smoothstep(1.70, 0.18, radius);
+    }
+
+    float transientDust(float2 point, constant FractalUniforms &u) {
+        float2 cell = floor((point + 1.6) * (70.0 + u.treble * 42.0));
+        float seed = hash21(cell + floor(u.time * (0.8 + u.motion * 1.8)));
+        float threshold = 0.992 - clamp(u.treble * 0.014 + u.beat * 0.010, 0.0, 0.025);
+        float sparkle = smoothstep(threshold, 1.0, seed);
+        return sparkle * smoothstep(0.12, 1.45, length(point)) * (0.08 + u.treble * 0.36 + u.beat * 0.28);
+    }
+
     float4 iterateFractal(float2 point, constant FractalUniforms &u) {
-        float audio = clamp(u.volume * (0.78 + u.sensitivity), 0.0, 1.0);
+        float audio = clamp(max(u.volume, sqrt(max(u.rms, 0.0)) * 0.70) * (0.78 + u.sensitivity), 0.0, 1.0);
         float bass = clamp(u.bass * (0.78 + u.sensitivity), 0.0, 1.2);
         float mid = clamp(u.mid * (0.78 + u.sensitivity), 0.0, 1.2);
         float treble = clamp(u.treble * (0.78 + u.sensitivity), 0.0, 1.2);
@@ -665,6 +910,11 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         float rotateAmount = sin(travel * 0.73 + mid * 1.7) * (0.10 + u.motion * 0.42);
         float zoom = 1.0 + bass * 0.28 + beat * 0.20 + audio * 0.14;
         float2 p = rotate2(point, rotateAmount) / zoom;
+        float warp = (mid * 0.034 + treble * 0.022 + beat * 0.018) * (0.36 + u.motion);
+        p += float2(
+            sin(p.y * 4.2 + travel * 4.8 + bass),
+            cos(p.x * 3.6 - travel * 4.0 + mid)
+        ) * warp;
         float2 z = float2(0.0);
         float2 c = p;
         float2 previous = float2(0.0);
@@ -739,6 +989,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         float vignette = smoothstep(1.55, 0.20, length(point));
         color *= brightness * (0.55 + vignette * 0.62);
         color += paletteGradient(u.palette, colorPhase + 0.21) * orbitGlow * (0.10 + u.glow * 0.30);
+        float filament = spectralFilament(point, u);
+        color += paletteGradient(u.palette, colorPhase + 0.38) * filament * (0.09 + treble * 0.18 + u.glow * 0.08);
+        color += paletteGradient(u.palette, colorPhase + 0.62) * transientDust(point, u);
         return float4(clamp(color, 0.0, 1.0), 1.0);
     }
 

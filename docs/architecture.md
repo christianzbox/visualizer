@@ -27,15 +27,17 @@ The capture callback only hands buffers to an analysis queue. Analysis produces 
 ## Presets
 
 - Spectrum Bars: smoothed logarithmic bands, bass glow, treble shimmer.
-- Liquid Waveform: ribbon waveform with bass-driven fluid drift.
-- Particle Galaxy: deterministic particle field with beat expansion and treble shimmer.
-- Neon Tunnel: radial line tunnel with audio-reactive depth.
-- Minimal Waveform: restrained low-density waveform for voice and background use.
+- Liquid Waveform: layered ribbon waveform with bass drift, treble caustics, and slow midrange veils.
+- Particle Galaxy: deterministic particle field with beat expansion, spiral arms, orbital ribbons, and treble shimmer.
+- Neon Tunnel: radial line tunnel with audio-reactive depth, transient rays, and bass-driven scale.
+- Minimal Waveform: restrained low-density waveform with quiet echoes and cinematic background wash.
 - Mandelbrot Bloom: classic escape-time Mandelbrot formula with bass zoom, mid rotation, and treble color bands.
 - Julia Vortex: Julia recurrence with an audio-driven complex seed.
 - Burning Ship: rectified complex recurrence with low-frequency expansion.
 - Tricorn Pulse: conjugate quadratic recurrence driven by mids and beat pressure.
 - Phoenix Field: feedback recurrence with treble detail and bass expansion.
+
+All visual presets use the same `VisualAudioFrame` features rather than independent random animation. Slow values such as smoothed volume and bass drive scale and bloom; onset and beat drive transient expansion; treble drives shimmer and fine detail.
 
 ## Test Strategy
 

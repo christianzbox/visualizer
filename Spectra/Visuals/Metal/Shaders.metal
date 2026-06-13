@@ -78,8 +78,33 @@ float3 paletteGradient(uint palette, float t) {
     return lerp3(low, high, smoothstep(0.08, 0.92, t));
 }
 
+float hash21(float2 p) {
+    p = fract(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float spectralFilament(float2 point, constant FractalUniforms &u) {
+    float radius = length(point);
+    float angle = atan2(point.y, point.x);
+    float tempo = u.time * (0.16 + u.motion * 0.42);
+    float bassFold = sin(radius * (8.0 + u.bass * 8.0) - tempo * 3.2 + u.beat * 1.8);
+    float midFold = sin(angle * (3.0 + u.mid * 4.0) + radius * 15.0 + tempo * 2.1);
+    float trebleFold = sin(radius * 42.0 - angle * 5.0 + tempo * 5.8);
+    float filament = bassFold * 0.46 + midFold * 0.36 + trebleFold * u.treble * 0.28;
+    return smoothstep(0.72, 1.0, filament) * smoothstep(1.70, 0.18, radius);
+}
+
+float transientDust(float2 point, constant FractalUniforms &u) {
+    float2 cell = floor((point + 1.6) * (70.0 + u.treble * 42.0));
+    float seed = hash21(cell + floor(u.time * (0.8 + u.motion * 1.8)));
+    float threshold = 0.992 - clamp(u.treble * 0.014 + u.beat * 0.010, 0.0, 0.025);
+    float sparkle = smoothstep(threshold, 1.0, seed);
+    return sparkle * smoothstep(0.12, 1.45, length(point)) * (0.08 + u.treble * 0.36 + u.beat * 0.28);
+}
+
 float4 iterateFractal(float2 point, constant FractalUniforms &u) {
-    float audio = clamp(u.volume * (0.78 + u.sensitivity), 0.0, 1.0);
+    float audio = clamp(max(u.volume, sqrt(max(u.rms, 0.0)) * 0.70) * (0.78 + u.sensitivity), 0.0, 1.0);
     float bass = clamp(u.bass * (0.78 + u.sensitivity), 0.0, 1.2);
     float mid = clamp(u.mid * (0.78 + u.sensitivity), 0.0, 1.2);
     float treble = clamp(u.treble * (0.78 + u.sensitivity), 0.0, 1.2);
@@ -88,6 +113,11 @@ float4 iterateFractal(float2 point, constant FractalUniforms &u) {
     float rotateAmount = sin(travel * 0.73 + mid * 1.7) * (0.10 + u.motion * 0.42);
     float zoom = 1.0 + bass * 0.28 + beat * 0.20 + audio * 0.14;
     float2 p = rotate2(point, rotateAmount) / zoom;
+    float warp = (mid * 0.034 + treble * 0.022 + beat * 0.018) * (0.36 + u.motion);
+    p += float2(
+        sin(p.y * 4.2 + travel * 4.8 + bass),
+        cos(p.x * 3.6 - travel * 4.0 + mid)
+    ) * warp;
     float2 z = float2(0.0);
     float2 c = p;
     float2 previous = float2(0.0);
@@ -162,6 +192,9 @@ float4 iterateFractal(float2 point, constant FractalUniforms &u) {
     float vignette = smoothstep(1.55, 0.20, length(point));
     color *= brightness * (0.55 + vignette * 0.62);
     color += paletteGradient(u.palette, colorPhase + 0.21) * orbitGlow * (0.10 + u.glow * 0.30);
+    float filament = spectralFilament(point, u);
+    color += paletteGradient(u.palette, colorPhase + 0.38) * filament * (0.09 + treble * 0.18 + u.glow * 0.08);
+    color += paletteGradient(u.palette, colorPhase + 0.62) * transientDust(point, u);
     return float4(clamp(color, 0.0, 1.0), 1.0);
 }
 

@@ -7,6 +7,7 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 - SwiftUI macOS shell.
 - Metal-backed visualizer view.
 - Ten working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, plus five true iterative fractal presets.
+- Cinematic render layers: ambient wash, reflections, waveform veils, galaxy arms, tunnel rays, fractal filaments, and transient sparkle mapped to real audio features.
 - Test Signal Mode with sine, bass pulse, noise, and fake beat pattern.
 - Accelerate/vDSP FFT analysis with adaptive band normalization, onset/beat detection, smoothing, silence detection, and level metering.
 - ScreenCaptureKit system mix and experimental app-source capture backend.

@@ -65,30 +65,57 @@ struct MainWindowView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Text("Spectra")
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text(appState.statusMessage)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.68))
-                .lineLimit(1)
-
-            Spacer()
-
-            HStack(spacing: 6) {
-                Image(systemName: "lock.shield")
-                Text("Local audio analysis")
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white.opacity(0.74))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(.black.opacity(0.34), in: Capsule())
+        ViewThatFits(in: .horizontal) {
+            regularTopBar
+            compactTopBar
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)
+    }
+
+    private var regularTopBar: some View {
+        HStack(spacing: 12) {
+            brandText
+            statusText
+            Spacer()
+            privacyBadge
+        }
+    }
+
+    private var compactTopBar: some View {
+        HStack(spacing: 10) {
+            brandText
+            statusText
+                .minimumScaleFactor(0.72)
+            Spacer(minLength: 8)
+        }
+    }
+
+    private var brandText: some View {
+        Text("Spectra")
+            .font(.system(size: 18, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+    }
+
+    private var statusText: some View {
+        Text(appState.statusMessage)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.68))
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private var privacyBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "lock.shield")
+            Text("Local audio analysis")
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(.white.opacity(0.74))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.black.opacity(0.34), in: Capsule())
     }
 
     private var noAudioState: some View {
