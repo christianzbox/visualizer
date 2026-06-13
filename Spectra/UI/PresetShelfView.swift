@@ -134,18 +134,34 @@ struct PresetShelfView: View {
             return "cloud.sun.fill"
         case .crystalCavern:
             return "diamond.fill"
-        case .forestCanopyFlight, .autumnForest, .bambooRain, .redwoodTrail, .rainforestTemple, .cherryBlossomValley:
+        case .forestCanopyFlight, .redwoodTrail, .rainforestTemple, .signalGarden:
             return "tree.fill"
-        case .riverValleyFlight, .glacialFjord, .coastalCliffs, .moonlitMarsh, .islandArchipelago, .riverCity, .oldTownCanals, .cyberHarbor:
+        case .riverValleyFlight, .glacialFjord, .coastalCliffs, .islandArchipelago, .underwaterReef:
             return "water.waves"
-        case .alpinePass, .stormRidge, .tundraLights, .auroraPeaks:
+        case .alpinePass, .stormRidge:
             return "mountain.2.fill"
-        case .desertDunes, .canyonRun, .volcanicBadlands, .savannaSunset, .desertCity, .crystalMesa:
+        case .desertDunes, .canyonRun, .volcanicBadlands, .lavaForge:
             return "sun.max.fill"
-        case .neonCityFlyover, .rainCity, .sunsetSkyline, .megaCityGrid, .rooftopChase, .industrialDocks, .spaceportDawn:
+        case .neonCityFlyover, .megaCityGrid, .spaceportDawn, .subwayRush, .rainWindow, .skylineEqualizer:
             return "building.2.fill"
-        case .mountainCitadel, .floatingCity, .snowVillage, .templeRuins:
+        case .mountainCitadel, .floatingCity, .templeRuins, .stainedGlassCathedral, .paperCutTheater:
             return "building.columns.fill"
+        case .clockworkAtrium:
+            return "gearshape.2.fill"
+        case .orbitalMechanics, .moonBase:
+            return "circle.dotted"
+        case .vinylOrbit:
+            return "record.circle"
+        case .lanternFestival:
+            return "lightbulb.fill"
+        case .kineticSculpture:
+            return "circle.grid.3x3.circle.fill"
+        case .danceFloorSilhouettes:
+            return "figure.dance"
+        case .dataStorm:
+            return "textformat.123"
+        case .neonCircuitBoard:
+            return "cpu.fill"
         }
     }
 }

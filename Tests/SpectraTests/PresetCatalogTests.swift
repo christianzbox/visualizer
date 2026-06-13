@@ -42,9 +42,18 @@ final class PresetCatalogTests: XCTestCase {
         let meshPresets = PresetCatalog.presets.filter { $0.id.usesMeshWorld }
         let variants = meshPresets.compactMap(\.id.meshWorldVariant)
 
-        XCTAssertEqual(meshPresets.count, 37)
+        XCTAssertEqual(meshPresets.count, 20)
         XCTAssertEqual(variants.count, meshPresets.count)
-        XCTAssertEqual(Set(variants), Set(0...36))
+        XCTAssertEqual(Set(variants), Set(0...19))
+    }
+
+    func testScenicPresetsAreExplicit() {
+        let scenicPresets = PresetCatalog.presets.filter { $0.id.usesScenicRenderer }
+        let modes = scenicPresets.compactMap(\.id.scenicMode)
+
+        XCTAssertEqual(scenicPresets.count, 17)
+        XCTAssertEqual(modes.count, scenicPresets.count)
+        XCTAssertEqual(Set(modes), Set(0...16))
     }
 }
 #endif

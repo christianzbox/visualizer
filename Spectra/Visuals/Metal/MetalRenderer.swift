@@ -245,6 +245,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let frame = renderSignalState.process(rawFrame, settings: settings, deltaTime: deltaTime)
         let time = renderSignalState.visualTime + Float(now - startTime) * 0.10
         let usesWorldRenderer = usesMeshWorldRenderer(preset)
+        let usesScenicRenderer = preset.usesScenicRenderer
         let usesFullscreenShader = preset.usesFullscreenShader && !usesWorldRenderer
         reusableVertices.removeAll(keepingCapacity: true)
         reusableTerrainVertices.removeAll(keepingCapacity: true)
@@ -279,7 +280,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 drawableSize: view.drawableSize
             )
         }
-        if !usesFullscreenShader && !usesWorldRenderer {
+        if !usesFullscreenShader && !usesWorldRenderer && !usesScenicRenderer {
             applyTraversalTransform(to: &reusableVertices, frame: frame, settings: settings, time: time)
         }
         if usesFullscreenShader, fractalPipelineState == nil {
@@ -440,6 +441,11 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         time: Float,
         drawableSize: CGSize
     ) {
+        if let scenicMode = preset.scenicMode {
+            scenicScene(into: &vertices, mode: scenicMode, frame: frame, settings: settings, time: time)
+            return
+        }
+
         switch preset {
         case .spectrumBars:
             spectrumBars(into: &vertices, frame: frame, settings: settings, time: time)
@@ -753,6 +759,508 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
     }
 
+    private func scenicScene(
+        into vertices: inout [SpectraVertex],
+        mode: Int,
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float
+    ) {
+        let palette = paletteColors(settings.palette)
+        let motion = settings.reduceMotion ? Float(0.10) : Float(settings.motionAmount)
+        let intensity = Float(settings.intensity)
+        let beat = frame.beatPulse * Float(settings.beatReactivity)
+        let volume = frame.smoothedVolume
+        vertices.reserveCapacity(6_000)
+        appendScenicBackdrop(into: &vertices, mode: mode, palette: palette, frame: frame, time: time)
+
+        switch mode {
+        case 0:
+            stainedGlassScene(into: &vertices, palette: palette, frame: frame, time: time, beat: beat)
+        case 1:
+            clockworkScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 2:
+            orbitalScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 3:
+            underwaterScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 4:
+            subwayScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion, beat: beat)
+        case 5:
+            vinylScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 6:
+            lanternScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 7:
+            rainWindowScene(into: &vertices, palette: palette, frame: frame, time: time, volume: volume)
+        case 8:
+            moonBaseScene(into: &vertices, palette: palette, frame: frame, time: time)
+        case 9:
+            kineticSculptureScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 10:
+            danceFloorScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion, beat: beat)
+        case 11:
+            dataStormScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        case 12:
+            lavaForgeScene(into: &vertices, palette: palette, frame: frame, time: time, intensity: intensity)
+        case 13:
+            paperCutScene(into: &vertices, palette: palette, frame: frame, time: time)
+        case 14:
+            circuitBoardScene(into: &vertices, palette: palette, frame: frame, time: time)
+        case 15:
+            signalGardenScene(into: &vertices, palette: palette, frame: frame, time: time, motion: motion)
+        default:
+            skylineEqualizerScene(into: &vertices, palette: palette, frame: frame, time: time)
+        }
+    }
+
+    private func appendScenicBackdrop(
+        into vertices: inout [SpectraVertex],
+        mode: Int,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float
+    ) {
+        let dark = SIMD3<Float>(0.004, 0.006, 0.012)
+        let floorColor = mix(palette.0 * 0.18, palette.1 * 0.10, Float(mode % 5) / 5)
+        let skyColor = mix(dark, palette.2 * 0.16, 0.30 + frame.smoothedVolume * 0.22)
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -1,
+            x1: 1,
+            y1: 1,
+            bottom: SIMD4<Float>(floorColor.x, floorColor.y, floorColor.z, 1),
+            top: SIMD4<Float>(skyColor.x, skyColor.y, skyColor.z, 1)
+        )
+
+        for index in 0..<6 {
+            let f = Float(index)
+            let y = -0.82 + f * 0.30 + sin(time * 0.10 + f) * 0.012
+            appendRibbonSegment(
+                &vertices,
+                x0: -1,
+                y0: y,
+                x1: 1,
+                y1: y + sin(time * 0.07 + f * 1.7) * 0.026,
+                halfThickness: 0.002,
+                colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.035),
+                colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.025)
+            )
+        }
+    }
+
+    private func stainedGlassScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        beat: Float
+    ) {
+        for column in 0..<5 {
+            let x0 = -0.88 + Float(column) * 0.44
+            let x1 = x0 + 0.34
+            appendQuad(
+                &vertices,
+                x0: x0,
+                y0: -0.90,
+                x1: x1,
+                y1: 0.70,
+                bottom: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.04),
+                top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.10 + frame.trebleEnergy * 0.08)
+            )
+        }
+
+        let rings = [Float(0.18), 0.32, 0.48, 0.64]
+        for (ringIndex, radius) in rings.enumerated() {
+            appendEllipseRibbon(
+                &vertices,
+                radiusX: radius + beat * 0.025,
+                radiusY: radius * 0.82 + frame.smoothedBass * 0.015,
+                rotation: time * 0.03 * Float(ringIndex + 1),
+                segments: 96,
+                halfThickness: 0.0035 + Float(ringIndex) * 0.0012,
+                colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.24),
+                colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.16 + frame.trebleEnergy * 0.14)
+            )
+        }
+
+        for spoke in 0..<32 {
+            let angle = Float(spoke) / 32 * Float.pi * 2 + sin(time * 0.08) * 0.06
+            let color = [palette.0, palette.1, palette.2][spoke % 3]
+            appendRibbonSegment(
+                &vertices,
+                x0: cos(angle) * 0.08,
+                y0: sin(angle) * 0.08 * 0.82,
+                x1: cos(angle) * (0.70 + frame.smoothedBass * 0.04),
+                y1: sin(angle) * (0.58 + frame.smoothedBass * 0.03),
+                halfThickness: 0.0028 + frame.trebleEnergy * 0.003,
+                colorA: SIMD4<Float>(color.x, color.y, color.z, 0.26),
+                colorB: SIMD4<Float>(min(1, color.x + 0.18), min(1, color.y + 0.18), min(1, color.z + 0.18), 0.12)
+            )
+        }
+        appendDisc(&vertices, center: .zero, radiusX: 0.09 + frame.smoothedBass * 0.04, radiusY: 0.09, segments: 40, color: SIMD4<Float>(1, 1, 1, 0.34 + beat * 0.20))
+    }
+
+    private func clockworkScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        appendGear(&vertices, center: SIMD2<Float>(-0.42, 0.18), radius: 0.34, teeth: 24, rotation: time * (0.18 + motion * 0.28), color: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.38 + frame.smoothedBass * 0.16))
+        appendGear(&vertices, center: SIMD2<Float>(0.34, 0.04), radius: 0.28, teeth: 18, rotation: -time * (0.24 + motion * 0.32), color: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.34))
+        appendGear(&vertices, center: SIMD2<Float>(0.02, -0.40), radius: 0.22, teeth: 16, rotation: time * 0.36, color: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.30 + frame.trebleEnergy * 0.15))
+        let pendulum = sin(time * (0.85 + motion * 0.6)) * 0.34
+        appendRibbonSegment(&vertices, x0: 0.68, y0: 0.76, x1: 0.68 + pendulum, y1: -0.54, halfThickness: 0.006, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.55), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.45))
+        appendDisc(&vertices, center: SIMD2<Float>(0.68 + pendulum, -0.60), radiusX: 0.055 + frame.beatPulse * 0.018, radiusY: 0.075, segments: 28, color: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.55))
+    }
+
+    private func orbitalScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        appendDisc(&vertices, center: .zero, radiusX: 0.10 + frame.smoothedBass * 0.05, radiusY: 0.10, segments: 48, color: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.48))
+        for orbit in 0..<5 {
+            let f = Float(orbit)
+            let rx = 0.26 + f * 0.13
+            let ry = 0.12 + f * 0.055
+            let rot = f * 0.42 + time * 0.035
+            appendEllipseRibbon(&vertices, radiusX: rx, radiusY: ry, rotation: rot, segments: 96, halfThickness: 0.0018, colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.20), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.10))
+            let a = time * (0.18 + motion * 0.16 + f * 0.025) + f * 1.7
+            let p = rotatePoint(SIMD2<Float>(cos(a) * rx, sin(a) * ry), rot)
+            let color = [palette.0, palette.1, palette.2][orbit % 3]
+            appendDisc(&vertices, center: p, radiusX: 0.028 + f * 0.007 + frame.beatPulse * 0.010, radiusY: 0.028 + f * 0.006, segments: 24, color: SIMD4<Float>(color.x, color.y, color.z, 0.62))
+        }
+    }
+
+    private func underwaterScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        for ray in 0..<8 {
+            let x = -0.92 + Float(ray) * 0.26 + sin(time * 0.12 + Float(ray)) * 0.04
+            appendRibbonSegment(&vertices, x0: x, y0: 1.0, x1: x + 0.22, y1: -0.55, halfThickness: 0.018, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.08), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.01))
+        }
+        for plant in 0..<18 {
+            let baseX = -0.94 + Float(plant) / 17 * 1.88
+            let height = 0.20 + hash(SIMD2<Float>(Float(plant), 2.1)) * 0.42 + frame.midEnergy * 0.10
+            var previous = SIMD2<Float>(baseX, -0.95)
+            for segment in 1...5 {
+                let t = Float(segment) / 5
+                let next = SIMD2<Float>(baseX + sin(time * (0.18 + motion * 0.2) + Float(plant) + t * 4.0) * 0.035 * t, -0.95 + height * t)
+                appendRibbonSegment(&vertices, x0: previous.x, y0: previous.y, x1: next.x, y1: next.y, halfThickness: 0.006 * (1 - t * 0.55), colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.34), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.22))
+                previous = next
+            }
+        }
+        for bubble in 0..<38 {
+            let seed = Float(bubble)
+            let x = -0.96 + hash(SIMD2<Float>(seed, 7.4)) * 1.92
+            let y = -1.0 + fract(hash(SIMD2<Float>(seed, 8.9)) + time * (0.05 + motion * 0.08)) * 1.95
+            let r = 0.008 + hash(SIMD2<Float>(seed, 9.1)) * 0.018 + frame.trebleEnergy * 0.006
+            appendDisc(&vertices, center: SIMD2<Float>(x, y), radiusX: r, radiusY: r, segments: 14, color: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.18))
+        }
+    }
+
+    private func subwayScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float,
+        beat: Float
+    ) {
+        let vanishing = SIMD2<Float>(0, 0.22 + frame.midEnergy * 0.06)
+        for rail in [-0.42, -0.16, 0.16, 0.42] as [Float] {
+            appendRibbonSegment(&vertices, x0: rail, y0: -1, x1: vanishing.x + rail * 0.08, y1: vanishing.y, halfThickness: 0.006, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.55), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.12))
+        }
+        for step in 0..<18 {
+            let depth = fract(Float(step) / 18 + time * (0.10 + motion * 0.18))
+            let y = -0.92 + pow(depth, 1.7) * 1.08
+            let width = 0.88 * (1 - depth)
+            appendRibbonSegment(&vertices, x0: -width, y0: y, x1: width, y1: y, halfThickness: 0.003 + (1 - depth) * 0.004, colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.16), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.10))
+        }
+        let trainX = -1.25 + fract(time * (0.08 + motion * 0.12)) * 2.5
+        appendQuad(&vertices, x0: trainX - 0.28, y0: -0.34, x1: trainX + 0.28, y1: 0.36, bottom: SIMD4<Float>(0.04, 0.05, 0.06, 0.86), top: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.52 + beat * 0.22))
+        for window in 0..<4 {
+            let x0 = trainX - 0.22 + Float(window) * 0.11
+            appendQuad(&vertices, x0: x0, y0: 0.02, x1: x0 + 0.075, y1: 0.25, bottom: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.34), top: SIMD4<Float>(1, 1, 1, 0.18))
+        }
+    }
+
+    private func vinylScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        appendDisc(&vertices, center: SIMD2<Float>(-0.16, -0.05), radiusX: 0.62, radiusY: 0.62, segments: 96, color: SIMD4<Float>(0.01, 0.012, 0.014, 0.92))
+        for groove in 0..<15 {
+            let r = 0.12 + Float(groove) * 0.032
+            appendEllipseRibbon(&vertices, radiusX: r, radiusY: r, rotation: time * 0.04, segments: 90, halfThickness: 0.0012, colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.08), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.04))
+        }
+        appendDisc(&vertices, center: SIMD2<Float>(-0.16, -0.05), radiusX: 0.14 + frame.smoothedBass * 0.035, radiusY: 0.14, segments: 48, color: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.56))
+        let needle = SIMD2<Float>(0.56 + sin(time * (0.15 + motion * 0.22)) * 0.08, 0.50)
+        appendRibbonSegment(&vertices, x0: needle.x, y0: needle.y, x1: 0.08, y1: 0.10, halfThickness: 0.007, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.55), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.42))
+        appendDisc(&vertices, center: needle, radiusX: 0.055, radiusY: 0.055, segments: 24, color: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.34))
+    }
+
+    private func lanternScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        for index in 0..<34 {
+            let seed = Float(index)
+            let x = -0.95 + hash(SIMD2<Float>(seed, 1.4)) * 1.90 + sin(time * 0.08 + seed) * 0.025
+            let y = -1.10 + fract(hash(SIMD2<Float>(seed, 2.9)) + time * (0.035 + motion * 0.055)) * 2.2
+            let size = 0.035 + hash(SIMD2<Float>(seed, 3.8)) * 0.045 + frame.beatPulse * 0.010
+            appendQuad(&vertices, x0: x - size * 0.8, y0: y - size, x1: x + size * 0.8, y1: y + size, bottom: SIMD4<Float>(palette.1.x, palette.1.y * 0.72, palette.1.z * 0.34, 0.34), top: SIMD4<Float>(1, 0.78, 0.28, 0.52 + frame.smoothedBass * 0.18))
+            appendRibbonSegment(&vertices, x0: x, y0: y - size, x1: x, y1: y - size - 0.06, halfThickness: 0.0014, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.22), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.02))
+        }
+    }
+
+    private func rainWindowScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        volume: Float
+    ) {
+        for building in 0..<12 {
+            let x0 = -1.0 + Float(building) * 0.18
+            let h = 0.25 + hash(SIMD2<Float>(Float(building), 6.1)) * 0.52
+            appendQuad(&vertices, x0: x0, y0: -0.92, x1: x0 + 0.12, y1: -0.92 + h, bottom: SIMD4<Float>(0.015, 0.018, 0.025, 0.72), top: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.16))
+        }
+        for pane in 0..<4 {
+            let x = -0.6 + Float(pane) * 0.4
+            appendRibbonSegment(&vertices, x0: x, y0: -1, x1: x, y1: 1, halfThickness: 0.004, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.16), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.10))
+        }
+        appendRibbonSegment(&vertices, x0: -1, y0: 0.18, x1: 1, y1: 0.18, halfThickness: 0.004, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.14), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.10))
+        for drop in 0..<70 {
+            let seed = Float(drop)
+            let x = -1 + hash(SIMD2<Float>(seed, 9.8)) * 2
+            let y = -1 + fract(hash(SIMD2<Float>(seed, 3.2)) - time * (0.12 + volume * 0.18)) * 2
+            let length = 0.06 + hash(SIMD2<Float>(seed, 4.2)) * 0.12
+            appendRibbonSegment(&vertices, x0: x, y0: y, x1: x - 0.018, y1: y - length, halfThickness: 0.0016, colorA: SIMD4<Float>(0.8, 0.9, 1, 0.20), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.03))
+        }
+    }
+
+    private func moonBaseScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float
+    ) {
+        appendQuad(&vertices, x0: -1, y0: -1, x1: 1, y1: -0.36, bottom: SIMD4<Float>(0.20, 0.21, 0.22, 1), top: SIMD4<Float>(0.44, 0.45, 0.46, 1))
+        for crater in 0..<16 {
+            let seed = Float(crater)
+            let x = -0.95 + hash(SIMD2<Float>(seed, 5.7)) * 1.9
+            let y = -0.92 + hash(SIMD2<Float>(seed, 8.1)) * 0.48
+            let r = 0.025 + hash(SIMD2<Float>(seed, 8.9)) * 0.07
+            appendDisc(&vertices, center: SIMD2<Float>(x, y), radiusX: r * 1.6, radiusY: r * 0.42, segments: 28, color: SIMD4<Float>(0.08, 0.09, 0.10, 0.26))
+        }
+        appendQuad(&vertices, x0: -0.34, y0: -0.42, x1: 0.24, y1: -0.18 + frame.smoothedBass * 0.03, bottom: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.46), top: SIMD4<Float>(0.82, 0.86, 0.86, 0.70))
+        appendDisc(&vertices, center: SIMD2<Float>(-0.46, -0.24), radiusX: 0.14, radiusY: 0.09, segments: 28, color: SIMD4<Float>(0.72, 0.76, 0.78, 0.44))
+        appendDisc(&vertices, center: SIMD2<Float>(0.36, -0.20), radiusX: 0.12, radiusY: 0.12, segments: 28, color: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.30))
+        appendRibbonSegment(&vertices, x0: 0.20, y0: -0.18, x1: 0.58 + sin(time * 0.4) * 0.03, y1: 0.28, halfThickness: 0.004, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.46), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.18))
+    }
+
+    private func kineticSculptureScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        for bar in 0..<5 {
+            let y = 0.70 - Float(bar) * 0.30
+            let sway = sin(time * (0.22 + motion * 0.15) + Float(bar)) * 0.16
+            appendRibbonSegment(&vertices, x0: -0.58 + sway, y0: y, x1: 0.58 + sway * 0.4, y1: y - 0.06, halfThickness: 0.004, colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.38), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.24))
+            for hanger in 0..<3 {
+                let x = -0.42 + Float(hanger) * 0.42 + sway
+                let length = 0.10 + hash(SIMD2<Float>(Float(bar), Float(hanger))) * 0.16
+                appendRibbonSegment(&vertices, x0: x, y0: y, x1: x + sin(time + Float(hanger)) * 0.025, y1: y - length, halfThickness: 0.0015, colorA: SIMD4<Float>(0.9, 0.9, 0.9, 0.24), colorB: SIMD4<Float>(0.7, 0.8, 0.9, 0.06))
+                let color = [palette.0, palette.1, palette.2][(bar + hanger) % 3]
+                appendDisc(&vertices, center: SIMD2<Float>(x, y - length - 0.03), radiusX: 0.035 + frame.beatPulse * 0.012, radiusY: 0.035, segments: 22, color: SIMD4<Float>(color.x, color.y, color.z, 0.48))
+            }
+        }
+    }
+
+    private func danceFloorScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float,
+        beat: Float
+    ) {
+        for beam in 0..<8 {
+            let x = -0.8 + Float(beam) * 0.23
+            appendRibbonSegment(&vertices, x0: x, y0: 0.96, x1: sin(time * 0.22 + Float(beam)) * 0.70, y1: -0.70, halfThickness: 0.018, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.10 + beat * 0.08), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.01))
+        }
+        for tile in 0..<18 {
+            let x0 = -0.92 + Float(tile) / 18 * 1.84
+            let lift = frame.spectrumBands.isEmpty ? 0 : frame.spectrumBands[tile % frame.spectrumBands.count] * 0.08
+            appendQuad(&vertices, x0: x0, y0: -0.96, x1: x0 + 0.08, y1: -0.86 + lift, bottom: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.20), top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.24 + lift))
+        }
+        for person in 0..<7 {
+            let x = -0.66 + Float(person) * 0.22
+            let bounce = abs(sin(time * (1.1 + motion) + Float(person))) * (0.04 + beat * 0.04)
+            appendHumanSilhouette(&vertices, position: SIMD2<Float>(x, -0.47 + bounce), scale: 0.16 + frame.smoothedBass * 0.04, phase: time + Float(person), color: SIMD4<Float>(0.01, 0.012, 0.018, 0.88))
+        }
+    }
+
+    private func dataStormScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        for column in 0..<34 {
+            let x = -0.98 + Float(column) / 33 * 1.96
+            let speed = 0.16 + hash(SIMD2<Float>(Float(column), 12.2)) * 0.28 + motion * 0.08
+            for block in 0..<8 {
+                let y = -1 + fract(Float(block) / 8 + time * speed + hash(SIMD2<Float>(Float(column), 4.4))) * 2
+                let alpha = 0.05 + hash(SIMD2<Float>(Float(block), Float(column))) * 0.22 + frame.trebleEnergy * 0.08
+                appendQuad(&vertices, x0: x, y0: y, x1: x + 0.026, y1: y + 0.050, bottom: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, alpha), top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, alpha * 0.80))
+            }
+        }
+        var previous = SIMD2<Float>(-0.72, 0.30)
+        for point in 1...10 {
+            let t = Float(point) / 10
+            let next = SIMD2<Float>(-0.72 + t * 1.44, sin(t * 17 + time * 0.8) * 0.26 + frame.beatPulse * 0.10)
+            appendRibbonSegment(&vertices, x0: previous.x, y0: previous.y, x1: next.x, y1: next.y, halfThickness: 0.004 + frame.beatPulse * 0.004, colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.46), colorB: SIMD4<Float>(1, 1, 1, 0.24))
+            previous = next
+        }
+    }
+
+    private func lavaForgeScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        intensity: Float
+    ) {
+        appendDisc(&vertices, center: SIMD2<Float>(0, -0.12), radiusX: 0.58, radiusY: 0.44, segments: 64, color: SIMD4<Float>(0.06, 0.025, 0.018, 0.88))
+        appendEllipseRibbon(&vertices, radiusX: 0.58, radiusY: 0.44, rotation: 0, segments: 96, halfThickness: 0.012, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.40), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.28))
+        for stream in 0..<6 {
+            let x = -0.50 + Float(stream) * 0.20
+            appendRibbonSegment(&vertices, x0: x, y0: -0.06, x1: x + sin(time * 0.32 + Float(stream)) * 0.10, y1: -0.92, halfThickness: 0.018 + frame.smoothedBass * 0.018, colorA: SIMD4<Float>(1, 0.46, 0.05, 0.55), colorB: SIMD4<Float>(palette.0.x, palette.0.y * 0.45, palette.0.z * 0.20, 0.12))
+        }
+        for spark in 0..<46 {
+            let seed = Float(spark)
+            let x = -0.68 + hash(SIMD2<Float>(seed, 1.1)) * 1.36
+            let y = -0.34 + fract(hash(SIMD2<Float>(seed, 1.8)) + time * (0.10 + frame.smoothedBass * 0.20)) * 0.94
+            let size = (0.004 + hash(SIMD2<Float>(seed, 2.7)) * 0.010) * (0.7 + intensity)
+            appendQuad(&vertices, x0: x - size, y0: y - size, x1: x + size, y1: y + size, bottom: SIMD4<Float>(1, 0.25, 0.04, 0.20), top: SIMD4<Float>(1, 0.82, 0.22, 0.55))
+        }
+    }
+
+    private func paperCutScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float
+    ) {
+        for layer in 0..<5 {
+            let lf = Float(layer)
+            let y = -0.92 + lf * 0.20 + sin(time * 0.08 + lf) * 0.02
+            let color = mix(palette.0, palette.2, lf / 4)
+            for segment in 0..<9 {
+                let x0 = -1 + Float(segment) / 9 * 2
+                let x1 = -1 + Float(segment + 1) / 9 * 2
+                let peak = y + 0.12 + hash(SIMD2<Float>(Float(segment), lf)) * 0.18 + frame.smoothedBass * 0.04
+                vertices.append(SpectraVertex(position: SIMD2<Float>(x0, y), color: SIMD4<Float>(color.x, color.y, color.z, 0.20 + lf * 0.08)))
+                vertices.append(SpectraVertex(position: SIMD2<Float>(x1, y), color: SIMD4<Float>(color.x, color.y, color.z, 0.20 + lf * 0.08)))
+                vertices.append(SpectraVertex(position: SIMD2<Float>((x0 + x1) * 0.5, peak), color: SIMD4<Float>(color.x, color.y, color.z, 0.34 + lf * 0.08)))
+            }
+        }
+        appendRibbonSegment(&vertices, x0: -0.82, y0: 0.70, x1: 0.82, y1: 0.70 + sin(time * 0.14) * 0.05, halfThickness: 0.012, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.20), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.14))
+    }
+
+    private func circuitBoardScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float
+    ) {
+        let spacing: Float = 0.16
+        for row in 0..<11 {
+            let y = -0.80 + Float(row) * spacing
+            for column in 0..<12 {
+                let x = -0.88 + Float(column) * spacing
+                if (row + column) % 3 != 0 {
+                    appendRibbonSegment(&vertices, x0: x, y0: y, x1: x + spacing * 0.78, y1: y, halfThickness: 0.0022, colorA: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.18), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.10))
+                }
+                if (row * column) % 4 == 0 {
+                    let pulse = 0.012 + frame.trebleEnergy * 0.012 + abs(sin(time * 0.8 + Float(row + column))) * 0.006
+                    appendDisc(&vertices, center: SIMD2<Float>(x, y), radiusX: pulse, radiusY: pulse, segments: 14, color: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.42))
+                }
+            }
+        }
+        let scanX = -1 + fract(time * 0.12) * 2
+        appendQuad(&vertices, x0: scanX - 0.035, y0: -1, x1: scanX + 0.035, y1: 1, bottom: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.02), top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.12 + frame.beatPulse * 0.10))
+    }
+
+    private func signalGardenScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float,
+        motion: Float
+    ) {
+        let bands = frame.spectrumBands.isEmpty ? VisualAudioFrame.silent.spectrumBands : frame.spectrumBands
+        for stem in 0..<28 {
+            let x = -0.92 + Float(stem) / 27 * 1.84
+            let energy = bands[stem % bands.count]
+            let height = 0.22 + energy * 0.48 + hash(SIMD2<Float>(Float(stem), 2.2)) * 0.22
+            var previous = SIMD2<Float>(x, -0.96)
+            for segment in 1...5 {
+                let t = Float(segment) / 5
+                let next = SIMD2<Float>(x + sin(time * (0.12 + motion * 0.1) + Float(stem) + t * 3.0) * 0.035 * t, -0.96 + height * t)
+                appendRibbonSegment(&vertices, x0: previous.x, y0: previous.y, x1: next.x, y1: next.y, halfThickness: 0.0045 * (1 - t * 0.4), colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.28), colorB: SIMD4<Float>(palette.0.x, palette.0.y, palette.0.z, 0.20))
+                previous = next
+            }
+            let color = mix(palette.0, palette.2, energy)
+            appendDisc(&vertices, center: previous, radiusX: 0.026 + energy * 0.026, radiusY: 0.026 + energy * 0.014, segments: 18, color: SIMD4<Float>(color.x, color.y, color.z, 0.42 + energy * 0.20))
+        }
+    }
+
+    private func skylineEqualizerScene(
+        into vertices: inout [SpectraVertex],
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame,
+        time: Float
+    ) {
+        let bands = frame.spectrumBands.isEmpty ? VisualAudioFrame.silent.spectrumBands : frame.spectrumBands
+        for building in 0..<32 {
+            let x0 = -0.98 + Float(building) / 32 * 1.96
+            let energy = bands[building % bands.count]
+            let width: Float = 0.044
+            let height = 0.16 + energy * 0.84
+            let color = mix(palette.0, palette.2, Float(building) / 31)
+            appendQuad(&vertices, x0: x0, y0: -0.94, x1: x0 + width, y1: -0.94 + height, bottom: SIMD4<Float>(0.02, 0.022, 0.03, 0.82), top: SIMD4<Float>(color.x, color.y, color.z, 0.36 + energy * 0.28))
+            for window in 0..<5 {
+                let y = -0.88 + Float(window) * 0.12
+                let lit = fract(sin(Float(building * 17 + window * 13) + time) * 17.1)
+                if lit < 0.42 + energy * 0.30 {
+                    appendQuad(&vertices, x0: x0 + 0.010, y0: y, x1: x0 + width - 0.010, y1: y + 0.026, bottom: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.22), top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.28))
+                }
+            }
+        }
+        appendRibbonSegment(&vertices, x0: -1, y0: -0.72 + sin(time * 0.12) * 0.03, x1: 1, y1: -0.72 + cos(time * 0.10) * 0.03, halfThickness: 0.004, colorA: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.24), colorB: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.18))
+    }
+
     private func fractalSurface(into vertices: inout [SpectraVertex], drawableSize: CGSize) {
         vertices.reserveCapacity(6)
         appendQuad(
@@ -844,10 +1352,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             style.fogStart = 10
             style.fogEnd = 58
             style.sun = SIMD2<Float>(0.20, 0.28)
-        case .autumnForest:
-            style.biome = .forest
-            style.forestDensity = 0.50
-            style.waterAmount = 0.25
         case .desertDunes:
             style.biome = .desert
             style.waterAmount = 0.02
@@ -874,39 +1378,11 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             style.lavaAmount = 0.80
             style.waterAmount = 0.02
             style.ridgeScale = 1.18
-        case .bambooRain:
-            style.biome = .forest
-            style.forestDensity = 0.72
-            style.waterAmount = 0.52
-            style.fogStart = 8
-            style.fogEnd = 52
         case .redwoodTrail:
             style.biome = .forest
             style.forestDensity = 0.68
             style.objectScale = 1.55
             style.cameraHeight = 4.6
-        case .moonlitMarsh:
-            style.biome = .wetland
-            style.forestDensity = 0.24
-            style.waterAmount = 0.92
-            style.fogStart = 8
-            style.fogEnd = 50
-            style.sun = SIMD2<Float>(0.40, 0.50)
-        case .savannaSunset:
-            style.biome = .savanna
-            style.forestDensity = 0.12
-            style.waterAmount = 0.16
-            style.ridgeScale = 0.62
-            style.sun = SIMD2<Float>(0.68, 0.25)
-        case .tundraLights:
-            style.biome = .frozen
-            style.snowAmount = 0.80
-            style.waterAmount = 0.20
-            style.fogEnd = 70
-        case .cherryBlossomValley:
-            style.biome = .forest
-            style.forestDensity = 0.44
-            style.waterAmount = 0.56
         case .rainforestTemple:
             style.biome = .tropical
             style.forestDensity = 0.62
@@ -923,48 +1399,12 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             style.waterAmount = 0.12
             style.cameraHeight = 7.0
             style.targetHeight = 3.0
-        case .rainCity:
-            style.biome = .city
-            style.cityDensity = 0.46
-            style.waterAmount = 0.42
-            style.fogStart = 8
-            style.fogEnd = 56
-        case .sunsetSkyline:
-            style.biome = .city
-            style.cityDensity = 0.40
-            style.waterAmount = 0.18
-            style.sun = SIMD2<Float>(0.70, 0.26)
-        case .cyberHarbor:
-            style.biome = .harbor
-            style.cityDensity = 0.42
-            style.waterAmount = 0.70
-        case .oldTownCanals:
-            style.biome = .oldTown
-            style.cityDensity = 0.34
-            style.waterAmount = 0.82
-            style.cameraHeight = 4.0
         case .megaCityGrid:
             style.biome = .city
             style.cityDensity = 0.78
             style.waterAmount = 0.04
             style.cameraHeight = 8.5
             style.targetHeight = 4.4
-        case .rooftopChase:
-            style.biome = .city
-            style.cityDensity = 0.66
-            style.waterAmount = 0.04
-            style.cameraHeight = 5.4
-            style.targetHeight = 4.0
-        case .industrialDocks:
-            style.biome = .industrial
-            style.cityDensity = 0.44
-            style.waterAmount = 0.60
-            style.fogEnd = 62
-        case .desertCity:
-            style.biome = .desert
-            style.cityDensity = 0.24
-            style.waterAmount = 0.05
-            style.ridgeScale = 0.58
         case .mountainCitadel:
             style.biome = .citadel
             style.cityDensity = 0.18
@@ -981,26 +1421,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             style.depth = 96
             style.fogStart = 18
             style.fogEnd = 92
-        case .crystalMesa:
-            style.biome = .crystal
-            style.ridgeScale = 1.18
-            style.waterAmount = 0.06
-        case .snowVillage:
-            style.biome = .village
-            style.cityDensity = 0.18
-            style.forestDensity = 0.22
-            style.snowAmount = 0.92
-            style.waterAmount = 0.20
-        case .auroraPeaks:
-            style.biome = .frozen
-            style.snowAmount = 1.0
-            style.ridgeScale = 1.42
-            style.fogEnd = 84
-        case .riverCity:
-            style.biome = .city
-            style.cityDensity = 0.42
-            style.waterAmount = 0.82
-            style.valleyWidth = 0.22
         case .templeRuins:
             style.biome = .ruins
             style.ruinDensity = 0.34
@@ -1013,7 +1433,10 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             style.cameraHeight = 5.8
             style.targetHeight = 2.2
             style.sun = SIMD2<Float>(0.62, 0.24)
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern:
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse,
+                .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern, .stainedGlassCathedral, .clockworkAtrium, .orbitalMechanics,
+                .underwaterReef, .subwayRush, .vinylOrbit, .lanternFestival, .rainWindow, .moonBase, .kineticSculpture, .danceFloorSilhouettes,
+                .dataStorm, .lavaForge, .paperCutTheater, .neonCircuitBoard, .signalGarden, .skylineEqualizer:
             break
         }
         return style
@@ -1874,6 +2297,97 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 colorB: colorB
             )
         }
+    }
+
+    private func appendDisc(
+        _ vertices: inout [SpectraVertex],
+        center: SIMD2<Float>,
+        radiusX: Float,
+        radiusY: Float,
+        segments: Int,
+        color: SIMD4<Float>
+    ) {
+        guard segments >= 3 else { return }
+        let inner = SIMD4<Float>(
+            min(1, color.x + 0.22),
+            min(1, color.y + 0.22),
+            min(1, color.z + 0.22),
+            color.w
+        )
+        let outer = SIMD4<Float>(color.x, color.y, color.z, color.w * 0.58)
+        for segment in 0..<segments {
+            let a0 = Float(segment) / Float(segments) * Float.pi * 2
+            let a1 = Float(segment + 1) / Float(segments) * Float.pi * 2
+            vertices.append(SpectraVertex(position: center, color: inner))
+            vertices.append(SpectraVertex(position: SIMD2<Float>(center.x + cos(a0) * radiusX, center.y + sin(a0) * radiusY), color: outer))
+            vertices.append(SpectraVertex(position: SIMD2<Float>(center.x + cos(a1) * radiusX, center.y + sin(a1) * radiusY), color: outer))
+        }
+    }
+
+    private func appendGear(
+        _ vertices: inout [SpectraVertex],
+        center: SIMD2<Float>,
+        radius: Float,
+        teeth: Int,
+        rotation: Float,
+        color: SIMD4<Float>
+    ) {
+        let safeTeeth = max(8, teeth)
+        appendEllipseRibbon(
+            &vertices,
+            radiusX: radius,
+            radiusY: radius,
+            rotation: rotation,
+            segments: safeTeeth * 5,
+            halfThickness: 0.008,
+            colorA: color,
+            colorB: SIMD4<Float>(color.x, color.y, color.z, color.w * 0.55)
+        )
+        appendEllipseRibbon(
+            &vertices,
+            radiusX: radius * 0.45,
+            radiusY: radius * 0.45,
+            rotation: -rotation * 0.3,
+            segments: safeTeeth * 3,
+            halfThickness: 0.006,
+            colorA: SIMD4<Float>(color.x, color.y, color.z, color.w * 0.8),
+            colorB: SIMD4<Float>(color.x, color.y, color.z, color.w * 0.35)
+        )
+        for tooth in 0..<safeTeeth {
+            let angle = Float(tooth) / Float(safeTeeth) * Float.pi * 2 + rotation
+            let p0 = center + SIMD2<Float>(cos(angle), sin(angle)) * (radius * 0.92)
+            let p1 = center + SIMD2<Float>(cos(angle), sin(angle)) * (radius * 1.13)
+            appendRibbonSegment(
+                &vertices,
+                x0: p0.x,
+                y0: p0.y,
+                x1: p1.x,
+                y1: p1.y,
+                halfThickness: radius * 0.018,
+                colorA: color,
+                colorB: SIMD4<Float>(min(1, color.x + 0.16), min(1, color.y + 0.16), min(1, color.z + 0.16), color.w * 0.72)
+            )
+        }
+    }
+
+    private func appendHumanSilhouette(
+        _ vertices: inout [SpectraVertex],
+        position: SIMD2<Float>,
+        scale: Float,
+        phase: Float,
+        color: SIMD4<Float>
+    ) {
+        let head = position + SIMD2<Float>(0, scale * 1.62)
+        let shoulder = position + SIMD2<Float>(0, scale * 1.18)
+        let hip = position + SIMD2<Float>(0, scale * 0.58)
+        let armSwing = sin(phase * 1.8) * scale * 0.36
+        let legSwing = cos(phase * 1.6) * scale * 0.26
+        appendDisc(&vertices, center: head, radiusX: scale * 0.16, radiusY: scale * 0.18, segments: 18, color: color)
+        appendRibbonSegment(&vertices, x0: shoulder.x, y0: shoulder.y, x1: hip.x, y1: hip.y, halfThickness: scale * 0.055, colorA: color, colorB: color)
+        appendRibbonSegment(&vertices, x0: shoulder.x, y0: shoulder.y, x1: shoulder.x - scale * 0.34 + armSwing, y1: shoulder.y - scale * 0.38, halfThickness: scale * 0.025, colorA: color, colorB: color)
+        appendRibbonSegment(&vertices, x0: shoulder.x, y0: shoulder.y, x1: shoulder.x + scale * 0.34 - armSwing, y1: shoulder.y - scale * 0.38, halfThickness: scale * 0.025, colorA: color, colorB: color)
+        appendRibbonSegment(&vertices, x0: hip.x, y0: hip.y, x1: hip.x - scale * 0.22 + legSwing, y1: hip.y - scale * 0.56, halfThickness: scale * 0.030, colorA: color, colorB: color)
+        appendRibbonSegment(&vertices, x0: hip.x, y0: hip.y, x1: hip.x + scale * 0.22 - legSwing, y1: hip.y - scale * 0.56, halfThickness: scale * 0.030, colorA: color, colorB: color)
     }
 
     private func applyTraversalTransform(
