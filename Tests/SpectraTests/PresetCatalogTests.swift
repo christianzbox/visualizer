@@ -33,9 +33,9 @@ final class PresetCatalogTests: XCTestCase {
         let shaderPresets = PresetCatalog.presets.filter { $0.id.usesFullscreenShader }
         let modes = shaderPresets.compactMap { $0.id.fullscreenShaderMode }
 
-        XCTAssertEqual(shaderPresets.count, 8)
+        XCTAssertEqual(shaderPresets.count, 18)
         XCTAssertEqual(modes.count, shaderPresets.count)
-        XCTAssertEqual(Set(modes), Set(0...7))
+        XCTAssertEqual(Set(modes), Set(0...17))
     }
 
     func testMeshWorldPresetsAreExplicit() {
@@ -51,9 +51,9 @@ final class PresetCatalogTests: XCTestCase {
         let scenicPresets = PresetCatalog.presets.filter { $0.id.usesScenicRenderer }
         let modes = scenicPresets.compactMap(\.id.scenicMode)
 
-        XCTAssertEqual(scenicPresets.count, 17)
+        XCTAssertEqual(scenicPresets.count, 7)
         XCTAssertEqual(modes.count, scenicPresets.count)
-        XCTAssertEqual(Set(modes), Set(0...16))
+        XCTAssertEqual(Set(modes), Set(0...6))
     }
 }
 #endif

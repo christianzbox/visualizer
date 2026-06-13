@@ -200,8 +200,8 @@ struct SpectraDiagnostics {
         try expect(Set(fractalModes) == Set(0...5), "Fractal presets should map to distinct shader formulas")
         let shaderPresets = PresetCatalog.presets.filter { $0.id.usesFullscreenShader }
         let shaderModes = shaderPresets.compactMap { $0.id.fullscreenShaderMode }
-        try expect(shaderPresets.count == 8, "Preset catalog should expose eight full-screen shader choices")
-        try expect(Set(shaderModes) == Set(0...7), "Full-screen shader presets should map to distinct shader modes")
+        try expect(shaderPresets.count == 18, "Preset catalog should expose eighteen full-screen shader choices")
+        try expect(Set(shaderModes) == Set(0...17), "Full-screen shader presets should map to distinct shader modes")
         let meshPresets = PresetCatalog.presets.filter { $0.id.usesMeshWorld }
         let meshVariants = meshPresets.compactMap(\.id.meshWorldVariant)
         try expect(meshPresets.count == 20, "Preset catalog should expose twenty mesh world choices")
@@ -209,9 +209,9 @@ struct SpectraDiagnostics {
         try expect(Set(meshVariants) == Set(0...19), "Mesh world variants should be unique and contiguous")
         let scenicPresets = PresetCatalog.presets.filter { $0.id.usesScenicRenderer }
         let scenicModes = scenicPresets.compactMap(\.id.scenicMode)
-        try expect(scenicPresets.count == 17, "Preset catalog should expose seventeen scenic renderer choices")
+        try expect(scenicPresets.count == 7, "Preset catalog should expose seven scenic renderer choices")
         try expect(scenicModes.count == scenicPresets.count, "Every scenic preset should have a scene mode")
-        try expect(Set(scenicModes) == Set(0...16), "Scenic modes should be unique and contiguous")
+        try expect(Set(scenicModes) == Set(0...6), "Scenic modes should be unique and contiguous")
     }
 
     private static func testCaptureErrors() throws {

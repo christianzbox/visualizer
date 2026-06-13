@@ -99,12 +99,20 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
             return fractalMode
         case .nebulaVoyage: return 6
         case .crystalCavern: return 7
+        case .underwaterReef: return 8
+        case .subwayRush: return 9
+        case .vinylOrbit: return 10
+        case .rainWindow: return 11
+        case .moonBase: return 12
+        case .danceFloorSilhouettes: return 13
+        case .dataStorm: return 14
+        case .lavaForge: return 15
+        case .neonCircuitBoard: return 16
+        case .skylineEqualizer: return 17
         case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .skyRealmFlight,
                 .forestCanopyFlight, .riverValleyFlight, .alpinePass, .stormRidge, .stainedGlassCathedral, .desertDunes, .canyonRun, .glacialFjord, .coastalCliffs,
-                .volcanicBadlands, .clockworkAtrium, .redwoodTrail, .orbitalMechanics, .underwaterReef, .subwayRush, .vinylOrbit, .rainforestTemple,
-                .islandArchipelago, .neonCityFlyover, .lanternFestival, .rainWindow, .moonBase, .kineticSculpture, .megaCityGrid, .danceFloorSilhouettes,
-                .dataStorm, .lavaForge, .mountainCitadel, .floatingCity, .paperCutTheater, .neonCircuitBoard, .signalGarden, .skylineEqualizer, .templeRuins,
-                .spaceportDawn:
+                .volcanicBadlands, .clockworkAtrium, .redwoodTrail, .orbitalMechanics, .rainforestTemple, .islandArchipelago, .neonCityFlyover,
+                .lanternFestival, .kineticSculpture, .megaCityGrid, .mountainCitadel, .floatingCity, .paperCutTheater, .signalGarden, .templeRuins, .spaceportDawn:
             return nil
         }
     }
@@ -156,24 +164,16 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .stainedGlassCathedral: return 0
         case .clockworkAtrium: return 1
         case .orbitalMechanics: return 2
-        case .underwaterReef: return 3
-        case .subwayRush: return 4
-        case .vinylOrbit: return 5
-        case .lanternFestival: return 6
-        case .rainWindow: return 7
-        case .moonBase: return 8
-        case .kineticSculpture: return 9
-        case .danceFloorSilhouettes: return 10
-        case .dataStorm: return 11
-        case .lavaForge: return 12
-        case .paperCutTheater: return 13
-        case .neonCircuitBoard: return 14
-        case .signalGarden: return 15
-        case .skylineEqualizer: return 16
+        case .lanternFestival: return 3
+        case .kineticSculpture: return 4
+        case .paperCutTheater: return 5
+        case .signalGarden: return 6
         case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse,
                 .phoenixField, .mandelboxFlight, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern, .forestCanopyFlight, .riverValleyFlight,
                 .alpinePass, .stormRidge, .desertDunes, .canyonRun, .glacialFjord, .coastalCliffs, .volcanicBadlands, .redwoodTrail, .rainforestTemple,
-                .islandArchipelago, .neonCityFlyover, .megaCityGrid, .mountainCitadel, .floatingCity, .templeRuins, .spaceportDawn:
+                .islandArchipelago, .neonCityFlyover, .underwaterReef, .subwayRush, .vinylOrbit, .rainWindow, .moonBase, .megaCityGrid,
+                .danceFloorSilhouettes, .dataStorm, .lavaForge, .mountainCitadel, .floatingCity, .neonCircuitBoard, .skylineEqualizer, .templeRuins,
+                .spaceportDawn:
             return nil
         }
     }
