@@ -81,6 +81,7 @@ final class AppState: ObservableObject {
     }
 
     func bootstrap() async {
+        ensureForegroundPresentation()
         updateWindowLevel()
         if settings.launchFullScreen {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
@@ -90,6 +91,14 @@ final class AppState: ObservableObject {
         await refreshSources()
         if settings.captureMode == .testSignal {
             await startCapture()
+        }
+    }
+
+    private func ensureForegroundPresentation() {
+        NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
         }
     }
 
