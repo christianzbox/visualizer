@@ -49,14 +49,16 @@ final class AppState: ObservableObject {
         get { settings.selectedPreset }
         set {
             guard settings.selectedPreset != newValue else { return }
-            settings.selectedPreset = newValue
-            settings.presetSettings = PresetCatalog.descriptor(for: newValue).defaultSettings
+            updateSettings {
+                $0.selectedPreset = newValue
+                $0.presetSettings = PresetCatalog.descriptor(for: newValue).defaultSettings
+            }
         }
     }
 
     var presetSettings: PresetSettings {
         get { settings.presetSettings }
-        set { settings.presetSettings = newValue }
+        set { updateSettings { $0.presetSettings = newValue } }
     }
 
     var renderSettings: PresetSettings {
@@ -68,7 +70,7 @@ final class AppState: ObservableObject {
     var captureMode: CaptureMode {
         get { settings.captureMode }
         set {
-            settings.captureMode = newValue
+            updateSettings { $0.captureMode = newValue }
             if newValue == .testSignal {
                 currentSource = AudioSource(id: "test-signal", name: "Test Signal", kind: .testSignal)
             }
@@ -78,8 +80,28 @@ final class AppState: ObservableObject {
     var testSignalType: TestSignalType {
         get { settings.testSignalType }
         set {
-            settings.testSignalType = newValue
+            updateSettings { $0.testSignalType = newValue }
             testSignalEngine.signalType = newValue
+        }
+    }
+
+    func updateSettings(_ update: (inout UserSettings) -> Void) {
+        var next = settings
+        update(&next)
+        settings = next
+    }
+
+    func selectSource(_ source: AudioSource) {
+        currentSource = source
+        updateSettings { settings in
+            settings.selectedSourceId = source.id
+            if source.kind == .application {
+                settings.captureMode = .application
+            } else if source.kind == .systemMix {
+                settings.captureMode = .systemMix
+            } else if source.kind == .testSignal {
+                settings.captureMode = .testSignal
+            }
         }
     }
 
@@ -172,7 +194,7 @@ final class AppState: ObservableObject {
             statusMessage = "Capture unavailable"
             if settings.captureMode != .testSignal {
                 statusMessage = "Using Test Signal fallback"
-                settings.captureMode = .testSignal
+                captureMode = .testSignal
                 await startCapture(retainedError: message)
             }
         }
@@ -199,8 +221,7 @@ final class AppState: ObservableObject {
     }
 
     func toggleAlwaysOnTop() {
-        settings.alwaysOnTop.toggle()
-        updateWindowLevel()
+        updateSettings { $0.alwaysOnTop.toggle() }
     }
 
     func updateFramesPerSecond(_ fps: Double) {

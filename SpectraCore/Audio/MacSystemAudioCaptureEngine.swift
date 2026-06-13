@@ -131,9 +131,6 @@ public final class MacSystemAudioCaptureEngine: NSObject, AudioCaptureEngine {
 
     private static func loadShareableContent() async throws -> SCShareableContent {
         do {
-            if #available(macOS 14.4, *) {
-                return try await SCShareableContent.currentProcess
-            }
             return try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         } catch {
             throw mapShareableContentError(error)

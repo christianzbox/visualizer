@@ -61,7 +61,9 @@ struct SettingsView: View {
 
                 Toggle("Reduce Motion", isOn: Binding(
                     get: { appState.settings.reduceMotion },
-                    set: { appState.settings.reduceMotion = $0 }
+                    set: { value in
+                        appState.updateSettings { $0.reduceMotion = value }
+                    }
                 ))
 
                 Slider(value: presetSettingBinding(\.sensitivity), in: 0...1) {
@@ -86,18 +88,24 @@ struct SettingsView: View {
 
                 Toggle("Show Debug Overlay", isOn: Binding(
                     get: { appState.settings.showDebugOverlay },
-                    set: { appState.settings.showDebugOverlay = $0 }
+                    set: { value in
+                        appState.updateSettings { $0.showDebugOverlay = value }
+                    }
                 ))
             }
 
             Section("Window") {
                 Toggle("Always On Top", isOn: Binding(
                     get: { appState.settings.alwaysOnTop },
-                    set: { appState.settings.alwaysOnTop = $0 }
+                    set: { value in
+                        appState.updateSettings { $0.alwaysOnTop = value }
+                    }
                 ))
                 Toggle("Launch Full Screen", isOn: Binding(
                     get: { appState.settings.launchFullScreen },
-                    set: { appState.settings.launchFullScreen = $0 }
+                    set: { value in
+                        appState.updateSettings { $0.launchFullScreen = value }
+                    }
                 ))
             }
 

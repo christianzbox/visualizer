@@ -66,8 +66,7 @@ struct AudioSourceView: View {
                     get: { appState.currentSource?.id ?? "" },
                     set: { sourceId in
                         guard let source = appState.availableSources.first(where: { $0.id == sourceId }) else { return }
-                        appState.currentSource = source
-                        appState.settings.selectedSourceId = source.id
+                        appState.selectSource(source)
                         Task { await appState.startCapture() }
                     }
                 )) {
