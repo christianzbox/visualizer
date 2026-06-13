@@ -186,6 +186,7 @@ struct SpectraDiagnostics {
 
     private static func testPresetCatalog() throws {
         let ids = PresetCatalog.presets.map(\.id)
+        try expect(PresetCatalog.presets.count == 50, "Preset catalog should expose fifty visual choices")
         try expect(Set(ids) == Set(VisualPresetID.allCases), "Preset catalog should expose every preset")
         try expect(ids.count == Set(ids).count, "Preset catalog should not contain duplicate IDs")
         for preset in PresetCatalog.presets {
@@ -202,7 +203,10 @@ struct SpectraDiagnostics {
         try expect(shaderPresets.count == 8, "Preset catalog should expose eight full-screen shader choices")
         try expect(Set(shaderModes) == Set(0...7), "Full-screen shader presets should map to distinct shader modes")
         let meshPresets = PresetCatalog.presets.filter { $0.id.usesMeshWorld }
-        try expect(Set(meshPresets.map(\.id)) == [.terrainFlight, .skyRealmFlight], "Mesh world presets should be explicit")
+        let meshVariants = meshPresets.compactMap(\.id.meshWorldVariant)
+        try expect(meshPresets.count == 37, "Preset catalog should expose thirty-seven mesh world choices")
+        try expect(meshVariants.count == meshPresets.count, "Every mesh world preset should have a variant")
+        try expect(Set(meshVariants) == Set(0...36), "Mesh world variants should be unique and contiguous")
     }
 
     private static func testCaptureErrors() throws {

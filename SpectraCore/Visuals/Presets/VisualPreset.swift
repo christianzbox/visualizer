@@ -16,6 +16,41 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
     case nebulaVoyage
     case skyRealmFlight
     case crystalCavern
+    case forestCanopyFlight
+    case riverValleyFlight
+    case alpinePass
+    case stormRidge
+    case autumnForest
+    case desertDunes
+    case canyonRun
+    case glacialFjord
+    case coastalCliffs
+    case volcanicBadlands
+    case bambooRain
+    case redwoodTrail
+    case moonlitMarsh
+    case savannaSunset
+    case tundraLights
+    case cherryBlossomValley
+    case rainforestTemple
+    case islandArchipelago
+    case neonCityFlyover
+    case rainCity
+    case sunsetSkyline
+    case cyberHarbor
+    case oldTownCanals
+    case megaCityGrid
+    case rooftopChase
+    case industrialDocks
+    case desertCity
+    case mountainCitadel
+    case floatingCity
+    case crystalMesa
+    case snowVillage
+    case auroraPeaks
+    case riverCity
+    case templeRuins
+    case spaceportDawn
 
     public var id: String { rawValue }
 
@@ -36,6 +71,7 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .nebulaVoyage: return "Nebula Voyage"
         case .skyRealmFlight: return "Sky Realm Flight"
         case .crystalCavern: return "Crystal Cavern"
+        default: return Self.humanized(rawValue)
         }
     }
 
@@ -47,7 +83,12 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .tricornPulse: return 3
         case .phoenixField: return 4
         case .mandelboxFlight: return 5
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern:
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern,
+                .forestCanopyFlight, .riverValleyFlight, .alpinePass, .stormRidge, .autumnForest, .desertDunes, .canyonRun, .glacialFjord, .coastalCliffs,
+                .volcanicBadlands, .bambooRain, .redwoodTrail, .moonlitMarsh, .savannaSunset, .tundraLights, .cherryBlossomValley, .rainforestTemple,
+                .islandArchipelago, .neonCityFlyover, .rainCity, .sunsetSkyline, .cyberHarbor, .oldTownCanals, .megaCityGrid, .rooftopChase,
+                .industrialDocks, .desertCity, .mountainCitadel, .floatingCity, .crystalMesa, .snowVillage, .auroraPeaks, .riverCity, .templeRuins,
+                .spaceportDawn:
             return nil
         }
     }
@@ -58,7 +99,12 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
             return fractalMode
         case .nebulaVoyage: return 6
         case .crystalCavern: return 7
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .skyRealmFlight:
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .skyRealmFlight,
+                .forestCanopyFlight, .riverValleyFlight, .alpinePass, .stormRidge, .autumnForest, .desertDunes, .canyonRun, .glacialFjord, .coastalCliffs,
+                .volcanicBadlands, .bambooRain, .redwoodTrail, .moonlitMarsh, .savannaSunset, .tundraLights, .cherryBlossomValley, .rainforestTemple,
+                .islandArchipelago, .neonCityFlyover, .rainCity, .sunsetSkyline, .cyberHarbor, .oldTownCanals, .megaCityGrid, .rooftopChase,
+                .industrialDocks, .desertCity, .mountainCitadel, .floatingCity, .crystalMesa, .snowVillage, .auroraPeaks, .riverCity, .templeRuins,
+                .spaceportDawn:
             return nil
         }
     }
@@ -68,12 +114,66 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
     }
 
     public var usesMeshWorld: Bool {
+        meshWorldVariant != nil
+    }
+
+    public var meshWorldVariant: Int? {
         switch self {
-        case .terrainFlight, .skyRealmFlight:
-            return true
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern:
-            return false
+        case .terrainFlight: return 0
+        case .skyRealmFlight: return 1
+        case .forestCanopyFlight: return 2
+        case .riverValleyFlight: return 3
+        case .alpinePass: return 4
+        case .stormRidge: return 5
+        case .autumnForest: return 6
+        case .desertDunes: return 7
+        case .canyonRun: return 8
+        case .glacialFjord: return 9
+        case .coastalCliffs: return 10
+        case .volcanicBadlands: return 11
+        case .bambooRain: return 12
+        case .redwoodTrail: return 13
+        case .moonlitMarsh: return 14
+        case .savannaSunset: return 15
+        case .tundraLights: return 16
+        case .cherryBlossomValley: return 17
+        case .rainforestTemple: return 18
+        case .islandArchipelago: return 19
+        case .neonCityFlyover: return 20
+        case .rainCity: return 21
+        case .sunsetSkyline: return 22
+        case .cyberHarbor: return 23
+        case .oldTownCanals: return 24
+        case .megaCityGrid: return 25
+        case .rooftopChase: return 26
+        case .industrialDocks: return 27
+        case .desertCity: return 28
+        case .mountainCitadel: return 29
+        case .floatingCity: return 30
+        case .crystalMesa: return 31
+        case .snowVillage: return 32
+        case .auroraPeaks: return 33
+        case .riverCity: return 34
+        case .templeRuins: return 35
+        case .spaceportDawn: return 36
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse,
+                .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern:
+            return nil
         }
+    }
+
+    private static func humanized(_ rawValue: String) -> String {
+        rawValue.reduce(into: "") { output, character in
+            if character.isUppercase {
+                output.append(" ")
+            }
+            output.append(character)
+        }
+        .split(separator: " ")
+        .map { word in
+            word.prefix(1).uppercased() + word.dropFirst()
+        }
+        .joined(separator: " ")
     }
 }
 

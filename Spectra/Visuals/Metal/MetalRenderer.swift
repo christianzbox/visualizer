@@ -39,6 +39,52 @@ private struct TerrainUniforms {
     var palette: UInt32
 }
 
+private enum MeshWorldBiome {
+    case mountain
+    case forest
+    case desert
+    case canyon
+    case coast
+    case volcanic
+    case wetland
+    case savanna
+    case frozen
+    case tropical
+    case city
+    case harbor
+    case oldTown
+    case industrial
+    case citadel
+    case floating
+    case crystal
+    case village
+    case ruins
+    case spaceport
+}
+
+private struct MeshWorldStyle {
+    var variant: Int
+    var biome: MeshWorldBiome
+    var elevated: Bool = false
+    var cameraHeight: Float = 3.2
+    var targetHeight: Float = 1.1
+    var width: Float = 50
+    var depth: Float = 88
+    var speed: Float = 10
+    var ridgeScale: Float = 1
+    var valleyWidth: Float = 1
+    var forestDensity: Float = 0
+    var cityDensity: Float = 0
+    var ruinDensity: Float = 0
+    var waterAmount: Float = 0.35
+    var snowAmount: Float = 0
+    var lavaAmount: Float = 0
+    var objectScale: Float = 1
+    var fogStart: Float = 16
+    var fogEnd: Float = 80
+    var sun: SIMD2<Float> = SIMD2<Float>(0.58, 0.30)
+}
+
 private struct RenderSignalState {
     private var volume = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.975)
     private var bass = AttackReleaseEnvelope(initialValue: 0, attack: 0.48, release: 0.982)
@@ -200,9 +246,11 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         reusableTerrainVertices.removeAll(keepingCapacity: true)
         let terrainUniforms: TerrainUniforms?
         if usesWorldRenderer {
+            let style = meshWorldStyle(for: preset)
             terrainUniforms = makeMeshWorld(
                 into: &reusableTerrainVertices,
                 preset: preset,
+                style: style,
                 frame: frame,
                 settings: settings,
                 time: time,
@@ -211,6 +259,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             appendMeshWorldBackdrop(
                 into: &reusableVertices,
                 preset: preset,
+                style: style,
                 frame: frame,
                 settings: settings,
                 time: time
@@ -398,7 +447,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             neonTunnel(into: &vertices, frame: frame, settings: settings, time: time)
         case .minimalWaveform:
             minimalWaveform(into: &vertices, frame: frame, settings: settings, time: time)
-        case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern:
+        default:
             fractalSurface(into: &vertices, drawableSize: drawableSize)
         }
     }
@@ -748,9 +797,228 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         preset.usesMeshWorld
     }
 
+    private func meshWorldStyle(for preset: VisualPresetID) -> MeshWorldStyle {
+        var style = MeshWorldStyle(variant: preset.meshWorldVariant ?? 0, biome: .mountain)
+        switch preset {
+        case .terrainFlight:
+            style.biome = .mountain
+            style.forestDensity = 0.16
+            style.waterAmount = 0.42
+            style.snowAmount = 0.42
+        case .skyRealmFlight:
+            style.biome = .floating
+            style.elevated = true
+            style.cameraHeight = 6.2
+            style.targetHeight = 2.2
+            style.width = 58
+            style.depth = 95
+            style.forestDensity = 0.10
+            style.cityDensity = 0.08
+            style.waterAmount = 0.12
+            style.fogStart = 18
+            style.fogEnd = 92
+            style.sun = SIMD2<Float>(0.46, 0.42)
+        case .forestCanopyFlight:
+            style.biome = .forest
+            style.forestDensity = 0.62
+            style.waterAmount = 0.30
+            style.cameraHeight = 4.0
+        case .riverValleyFlight:
+            style.biome = .forest
+            style.forestDensity = 0.36
+            style.waterAmount = 0.88
+            style.valleyWidth = 0.24
+        case .alpinePass:
+            style.biome = .mountain
+            style.snowAmount = 0.82
+            style.ridgeScale = 1.24
+            style.cameraHeight = 4.5
+        case .stormRidge:
+            style.biome = .mountain
+            style.snowAmount = 0.32
+            style.ridgeScale = 1.36
+            style.fogStart = 10
+            style.fogEnd = 58
+            style.sun = SIMD2<Float>(0.20, 0.28)
+        case .autumnForest:
+            style.biome = .forest
+            style.forestDensity = 0.50
+            style.waterAmount = 0.25
+        case .desertDunes:
+            style.biome = .desert
+            style.waterAmount = 0.02
+            style.ridgeScale = 0.50
+            style.cameraHeight = 3.4
+            style.sun = SIMD2<Float>(0.62, 0.36)
+        case .canyonRun:
+            style.biome = .canyon
+            style.waterAmount = 0.34
+            style.ridgeScale = 1.48
+            style.valleyWidth = 0.34
+            style.width = 42
+        case .glacialFjord:
+            style.biome = .frozen
+            style.snowAmount = 0.95
+            style.waterAmount = 0.78
+            style.ridgeScale = 1.22
+        case .coastalCliffs:
+            style.biome = .coast
+            style.waterAmount = 0.82
+            style.forestDensity = 0.16
+        case .volcanicBadlands:
+            style.biome = .volcanic
+            style.lavaAmount = 0.80
+            style.waterAmount = 0.02
+            style.ridgeScale = 1.18
+        case .bambooRain:
+            style.biome = .forest
+            style.forestDensity = 0.72
+            style.waterAmount = 0.52
+            style.fogStart = 8
+            style.fogEnd = 52
+        case .redwoodTrail:
+            style.biome = .forest
+            style.forestDensity = 0.68
+            style.objectScale = 1.55
+            style.cameraHeight = 4.6
+        case .moonlitMarsh:
+            style.biome = .wetland
+            style.forestDensity = 0.24
+            style.waterAmount = 0.92
+            style.fogStart = 8
+            style.fogEnd = 50
+            style.sun = SIMD2<Float>(0.40, 0.50)
+        case .savannaSunset:
+            style.biome = .savanna
+            style.forestDensity = 0.12
+            style.waterAmount = 0.16
+            style.ridgeScale = 0.62
+            style.sun = SIMD2<Float>(0.68, 0.25)
+        case .tundraLights:
+            style.biome = .frozen
+            style.snowAmount = 0.80
+            style.waterAmount = 0.20
+            style.fogEnd = 70
+        case .cherryBlossomValley:
+            style.biome = .forest
+            style.forestDensity = 0.44
+            style.waterAmount = 0.56
+        case .rainforestTemple:
+            style.biome = .tropical
+            style.forestDensity = 0.62
+            style.ruinDensity = 0.14
+            style.waterAmount = 0.46
+        case .islandArchipelago:
+            style.biome = .tropical
+            style.forestDensity = 0.22
+            style.waterAmount = 0.94
+            style.ridgeScale = 0.72
+        case .neonCityFlyover:
+            style.biome = .city
+            style.cityDensity = 0.56
+            style.waterAmount = 0.12
+            style.cameraHeight = 7.0
+            style.targetHeight = 3.0
+        case .rainCity:
+            style.biome = .city
+            style.cityDensity = 0.46
+            style.waterAmount = 0.42
+            style.fogStart = 8
+            style.fogEnd = 56
+        case .sunsetSkyline:
+            style.biome = .city
+            style.cityDensity = 0.40
+            style.waterAmount = 0.18
+            style.sun = SIMD2<Float>(0.70, 0.26)
+        case .cyberHarbor:
+            style.biome = .harbor
+            style.cityDensity = 0.42
+            style.waterAmount = 0.70
+        case .oldTownCanals:
+            style.biome = .oldTown
+            style.cityDensity = 0.34
+            style.waterAmount = 0.82
+            style.cameraHeight = 4.0
+        case .megaCityGrid:
+            style.biome = .city
+            style.cityDensity = 0.78
+            style.waterAmount = 0.04
+            style.cameraHeight = 8.5
+            style.targetHeight = 4.4
+        case .rooftopChase:
+            style.biome = .city
+            style.cityDensity = 0.66
+            style.waterAmount = 0.04
+            style.cameraHeight = 5.4
+            style.targetHeight = 4.0
+        case .industrialDocks:
+            style.biome = .industrial
+            style.cityDensity = 0.44
+            style.waterAmount = 0.60
+            style.fogEnd = 62
+        case .desertCity:
+            style.biome = .desert
+            style.cityDensity = 0.24
+            style.waterAmount = 0.05
+            style.ridgeScale = 0.58
+        case .mountainCitadel:
+            style.biome = .citadel
+            style.cityDensity = 0.18
+            style.ruinDensity = 0.22
+            style.snowAmount = 0.34
+            style.ridgeScale = 1.24
+        case .floatingCity:
+            style.biome = .floating
+            style.elevated = true
+            style.cityDensity = 0.24
+            style.cameraHeight = 7.0
+            style.targetHeight = 3.4
+            style.width = 58
+            style.depth = 96
+            style.fogStart = 18
+            style.fogEnd = 92
+        case .crystalMesa:
+            style.biome = .crystal
+            style.ridgeScale = 1.18
+            style.waterAmount = 0.06
+        case .snowVillage:
+            style.biome = .village
+            style.cityDensity = 0.18
+            style.forestDensity = 0.22
+            style.snowAmount = 0.92
+            style.waterAmount = 0.20
+        case .auroraPeaks:
+            style.biome = .frozen
+            style.snowAmount = 1.0
+            style.ridgeScale = 1.42
+            style.fogEnd = 84
+        case .riverCity:
+            style.biome = .city
+            style.cityDensity = 0.42
+            style.waterAmount = 0.82
+            style.valleyWidth = 0.22
+        case .templeRuins:
+            style.biome = .ruins
+            style.ruinDensity = 0.34
+            style.forestDensity = 0.28
+            style.waterAmount = 0.30
+        case .spaceportDawn:
+            style.biome = .spaceport
+            style.cityDensity = 0.38
+            style.waterAmount = 0.08
+            style.cameraHeight = 5.8
+            style.targetHeight = 2.2
+            style.sun = SIMD2<Float>(0.62, 0.24)
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern:
+            break
+        }
+        return style
+    }
+
     private func appendMeshWorldBackdrop(
         into vertices: inout [SpectraVertex],
         preset: VisualPresetID,
+        style: MeshWorldStyle,
         frame: VisualAudioFrame,
         settings: PresetSettings,
         time: Float
@@ -758,10 +1026,12 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let palette = paletteColors(settings.palette)
         let glow = Float(settings.glowAmount)
         let volume = frame.smoothedVolume
-        let sunX = preset == .skyRealmFlight ? Float(0.46) : Float(0.58)
-        let sunY = preset == .skyRealmFlight ? Float(0.42) : Float(0.30)
-        let skyLow = mix(palette.0 * 0.23, palette.1 * 0.20, 0.35 + volume * 0.18)
-        let skyHigh = mix(palette.2 * 0.11, SIMD3<Float>(0.010, 0.018, 0.040), 0.45)
+        let sunX = style.sun.x
+        let sunY = style.sun.y
+        let night = nightFactor(style)
+        let heat = heatFactor(style)
+        let skyLow = mix(palette.0 * (0.18 + heat * 0.16), palette.1 * 0.20, 0.35 + volume * 0.18)
+        let skyHigh = mix(palette.2 * (0.08 + night * 0.06), SIMD3<Float>(0.006, 0.012, 0.030), 0.45 + night * 0.32)
         let horizon = mix(palette.0 * 0.32, palette.2 * 0.18, 0.35)
 
         appendQuad(
@@ -787,7 +1057,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         for layer in 0..<5 {
             let lf = Float(layer)
             let y = 0.02 + lf * 0.12 + sin(time * (0.06 + lf * 0.012) + lf) * 0.025
-            let alpha = 0.028 + glow * 0.018 + frame.trebleEnergy * 0.015
+            let alpha = 0.020 + glow * 0.018 + frame.trebleEnergy * 0.015 + night * 0.018
             appendRibbonSegment(
                 &vertices,
                 x0: -1.05,
@@ -815,6 +1085,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private func makeMeshWorld(
         into vertices: inout [TerrainVertex],
         preset: VisualPresetID,
+        style: MeshWorldStyle,
         frame: VisualAudioFrame,
         settings: PresetSettings,
         time: Float,
@@ -823,15 +1094,15 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let palette = paletteColors(settings.palette)
         let motion = settings.reduceMotion ? Float(0.12) : Float(settings.motionAmount)
         let intensity = Float(settings.intensity)
-        let isSkyRealm = preset == .skyRealmFlight
-        let travel = time * (9.0 + motion * 11.0 + frame.smoothedVolume * 1.5)
-        let cameraX = sin(time * 0.31) * (isSkyRealm ? 6.8 : 4.4) + sin(time * 0.093) * (isSkyRealm ? 7.0 : 3.2)
-        let cameraY = (isSkyRealm ? Float(6.2) : Float(3.0)) + frame.smoothedVolume * 0.85 + frame.smoothedBass * 0.35
+        let travel = time * (style.speed + motion * 8.0 + frame.smoothedVolume * 1.3)
+        let cameraX = sin(time * 0.31 + Float(style.variant) * 0.17) * (style.width * 0.10)
+            + sin(time * 0.093 + Float(style.variant)) * (style.width * 0.065)
+        let cameraY = style.cameraHeight + frame.smoothedVolume * 0.70 + frame.smoothedBass * 0.30
         let camera = SIMD3<Float>(cameraX, cameraY, travel)
         let target = SIMD3<Float>(
-            cameraX + sin(time * 0.23) * (isSkyRealm ? 5.5 : 3.0),
-            isSkyRealm ? 2.2 + frame.midEnergy * 0.70 : 1.05 + frame.midEnergy * 0.45,
-            travel + (isSkyRealm ? 19.0 : 16.0)
+            cameraX + sin(time * 0.23 + Float(style.variant) * 0.09) * (style.width * 0.08),
+            style.targetHeight + frame.midEnergy * 0.55,
+            travel + (style.elevated ? 19.0 : 16.0)
         )
         let aspect = max(0.2, Float(drawableSize.width / max(1, drawableSize.height)))
         let projection = perspectiveMatrix(fovY: Float.pi / 3.05, aspect: aspect, near: 0.08, far: 125)
@@ -840,8 +1111,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
         let columns = settings.reduceMotion ? 48 : 64
         let rows = settings.reduceMotion ? 72 : 92
-        let worldWidth = isSkyRealm ? Float(58) : Float(48)
-        let worldDepth = isSkyRealm ? Float(95) : Float(88)
+        let worldWidth = style.width
+        let worldDepth = style.depth
         let stepX = worldWidth / Float(columns)
         let stepZ = worldDepth / Float(rows)
         let startX = camera.x - worldWidth * 0.5
@@ -863,8 +1134,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                     z: z,
                     time: time,
                     frame: frame,
+                    style: style,
                     intensity: intensity,
-                    isSkyRealm: isSkyRealm
                 )
                 heights[index] = height
                 positions[index] = SIMD3<Float>(x, height, z)
@@ -891,7 +1162,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                     frame: frame,
                     palette: palette,
                     time: time,
-                    isSkyRealm: isSkyRealm
+                    style: style
                 )
             }
         }
@@ -911,14 +1182,27 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
                 appendTerrainVertex(&vertices, position: positions[i01], normal: normals[i01], color: colors[i01])
             }
         }
+        appendWorldObjects(
+            into: &vertices,
+            camera: camera,
+            startX: startX,
+            startZ: startZ,
+            width: worldWidth,
+            depth: worldDepth,
+            style: style,
+            frame: frame,
+            palette: palette,
+            time: time,
+            intensity: intensity
+        )
 
-        let fogBase = isSkyRealm
+        let fogBase = style.elevated
             ? mix(SIMD3<Float>(0.05, 0.11, 0.16), palette.2 * 0.20, 0.45)
-            : mix(SIMD3<Float>(0.025, 0.040, 0.060), palette.0 * 0.18, 0.42)
+            : mix(SIMD3<Float>(0.025, 0.040, 0.060), palette.0 * (0.18 + nightFactor(style) * 0.12), 0.42)
         let light = simd_normalize(SIMD3<Float>(
-            isSkyRealm ? -0.36 : -0.54,
-            isSkyRealm ? 0.78 : 0.84,
-            isSkyRealm ? -0.28 : -0.34
+            style.elevated ? -0.36 : -0.54,
+            style.elevated ? 0.78 : 0.84,
+            style.elevated ? -0.28 : -0.34
         ))
         return TerrainUniforms(
             viewProjectionMatrix: viewProjection,
@@ -926,8 +1210,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             lightDirection: SIMD4<Float>(light.x, light.y, light.z, 0),
             fogColor: SIMD4<Float>(fogBase.x, fogBase.y, fogBase.z, 1),
             audio: SIMD4<Float>(frame.smoothedVolume, frame.smoothedBass, frame.trebleEnergy, frame.beatPulse),
-            fogStart: isSkyRealm ? 18 : 16,
-            fogEnd: isSkyRealm ? 92 : 78,
+            fogStart: style.fogStart,
+            fogEnd: style.fogEnd,
             time: time,
             palette: paletteIndex(settings.palette)
         )
@@ -951,24 +1235,29 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         z: Float,
         time: Float,
         frame: VisualAudioFrame,
+        style: MeshWorldStyle,
         intensity: Float,
-        isSkyRealm: Bool
     ) -> Float {
         let drift = SIMD2<Float>(sin(time * 0.035), cos(time * 0.027)) * 2.4
         let p = SIMD2<Float>(x, z)
-        let broad = fbm(p * 0.030 + drift)
-        let ridges = ridgedFbm(p * (isSkyRealm ? 0.080 : 0.068) + SIMD2<Float>(0, time * 0.030))
+        let broad = fbm(p * terrainFrequency(style, base: 0.030) + drift)
+        let ridges = ridgedFbm(p * terrainFrequency(style, base: 0.068) * style.ridgeScale + SIMD2<Float>(0, time * 0.030))
         let detail = fbm(p * 0.175 + SIMD2<Float>(broad * 2.0, ridges * 1.3))
-        let valleyCenter = sin(z * 0.055 + time * 0.10) * (isSkyRealm ? 7.5 : 4.8)
-        let valley = exp(-abs(x - valleyCenter) * (isSkyRealm ? 0.10 : 0.17))
+        let valleyCenter = sin(z * 0.055 + time * 0.10 + Float(style.variant) * 0.22) * (style.elevated ? 7.5 : 4.8)
+        let valley = exp(-abs(x - valleyCenter) * style.valleyWidth)
         let terraces = sin((broad * 2.7 + ridges * 1.8 + z * 0.018) * 6.0) * 0.11
-        if isSkyRealm {
+        if style.elevated {
             let islandLift = smoothstep(0.24, 0.92, ridges) * 5.2
             let cloudPlateau = smoothstep(0.42, 0.76, broad) * 2.0
             return 0.4 + islandLift + cloudPlateau + detail * 1.1 + terraces - valley * 0.7 + frame.smoothedBass * 0.18
         }
-        let mountain = pow(max(0, ridges), 1.55) * 9.5 + broad * 3.1 + detail * 1.15
-        return (mountain - 4.4 - valley * 1.3) * (0.70 + intensity * 0.34) + terraces + frame.smoothedBass * 0.28
+        let biomeHeight = biomeHeightScale(style)
+        let dune = sin(x * 0.16 + broad * 2.0) * sin(z * 0.045) * 1.3
+        let mountain = pow(max(0, ridges), 1.55) * 9.5 * biomeHeight + broad * 3.1 + detail * 1.15
+        let cityGrade = style.cityDensity > 0 ? smoothstep(0.18, 0.80, broad) * 0.35 : 1
+        let desertShape = (style.biome == .desert || style.biome == .savanna) ? dune * 0.85 + broad * 1.8 : 0
+        let base = (mountain - 4.4 - valley * style.waterAmount * 2.5) * cityGrade
+        return (base + desertShape) * (0.70 + intensity * 0.34) + terraces + frame.smoothedBass * 0.24 + lavaLift(style, ridges: ridges)
     }
 
     private func terrainColor(
@@ -977,30 +1266,470 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         frame: VisualAudioFrame,
         palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
         time: Float,
-        isSkyRealm: Bool
+        style: MeshWorldStyle
     ) -> SIMD4<Float> {
         let slope = 1 - max(0, normal.y)
         let ridgeDetail = ridgedFbm(SIMD2<Float>(position.x, position.z) * 0.22 + time * 0.015)
-        let valley = exp(-abs(position.x - sin(position.z * 0.055 + time * 0.10) * (isSkyRealm ? 7.5 : 4.8)) * (isSkyRealm ? 0.10 : 0.17))
-        let grass = isSkyRealm
+        let valley = exp(-abs(position.x - sin(position.z * 0.055 + time * 0.10 + Float(style.variant) * 0.22) * (style.elevated ? 7.5 : 4.8)) * style.valleyWidth)
+        let grass = style.elevated
             ? mix(SIMD3<Float>(0.18, 0.42, 0.28), palette.1 * 0.72, 0.45)
-            : mix(SIMD3<Float>(0.12, 0.30, 0.20), palette.1 * 0.46, 0.38)
-        let rock = mix(SIMD3<Float>(0.22, 0.23, 0.25), palette.0 * 0.34, 0.32)
+            : biomeGroundColor(style, palette: palette)
+        let rock = biomeRockColor(style, palette: palette)
         let snow = mix(SIMD3<Float>(0.72, 0.78, 0.78), palette.2 * 0.24 + SIMD3<Float>(0.45, 0.48, 0.52), 0.22)
         let water = mix(SIMD3<Float>(0.04, 0.15, 0.22), palette.0 * 0.64, 0.40)
         let mineral = mix(palette.2 * 0.70, SIMD3<Float>(0.70, 0.88, 0.94), 0.24)
 
         let rockMix = smoothstep(0.16, 0.66, slope + ridgeDetail * 0.22)
-        let snowMix = smoothstep(isSkyRealm ? 5.7 : 4.8, isSkyRealm ? 9.8 : 8.5, position.y + ridgeDetail * 1.2)
-        let waterMix = valley * smoothstep(isSkyRealm ? 2.2 : 1.0, isSkyRealm ? -0.2 : -1.3, position.y)
-        let mineralMix = smoothstep(0.78, 1.0, ridgeDetail) * (0.10 + frame.trebleEnergy * 0.22)
+        let snowMix = smoothstep(4.2 - style.snowAmount * 2.8, 8.4 - style.snowAmount * 1.8, position.y + ridgeDetail * 1.2) * (0.20 + style.snowAmount)
+        let waterMix = valley * style.waterAmount * smoothstep(1.4, -1.4, position.y)
+        let mineralMix = smoothstep(0.78, 1.0, ridgeDetail) * (0.10 + frame.trebleEnergy * 0.22 + style.lavaAmount * 0.10)
         var color = mix(grass, rock, rockMix)
         color = mix(color, snow, snowMix * 0.62)
         color = mix(color, water, min(0.72, waterMix))
         color = mix(color, mineral, mineralMix)
+        if style.lavaAmount > 0 {
+            let lava = smoothstep(0.72, 1.0, ridgeDetail + slope * 0.22) * style.lavaAmount
+            color = mix(color, SIMD3<Float>(0.95, 0.22, 0.05) + palette.1 * 0.20, lava * 0.55)
+        }
         color += palette.1 * frame.smoothedBass * 0.035
         color += palette.2 * frame.trebleEnergy * smoothstep(0.52, 0.92, ridgeDetail) * 0.045
         return SIMD4<Float>(min(1, color.x), min(1, color.y), min(1, color.z), 1)
+    }
+
+    private func appendWorldObjects(
+        into vertices: inout [TerrainVertex],
+        camera: SIMD3<Float>,
+        startX: Float,
+        startZ: Float,
+        width: Float,
+        depth: Float,
+        style: MeshWorldStyle,
+        frame: VisualAudioFrame,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        time: Float,
+        intensity: Float
+    ) {
+        let cell: Float = style.cityDensity > 0.35 ? 5.8 : 6.8
+        let minZ = floor(startZ / cell) * cell
+        let maxZ = startZ + depth
+        var z = minZ
+        while z < maxZ {
+            var x = floor(startX / cell) * cell
+            while x < startX + width {
+                let seed = hash(SIMD2<Float>(floor(x / cell) + Float(style.variant) * 11.0, floor(z / cell) - Float(style.variant) * 7.0))
+                let jitter = SIMD2<Float>(
+                    (hash(SIMD2<Float>(seed, 1.7)) - 0.5) * cell * 0.72,
+                    (hash(SIMD2<Float>(seed, 8.4)) - 0.5) * cell * 0.72
+                )
+                let positionX = x + cell * 0.5 + jitter.x
+                let positionZ = z + cell * 0.5 + jitter.y
+                let groundY = terrainHeight(
+                    x: positionX,
+                    z: positionZ,
+                    time: time,
+                    frame: frame,
+                    style: style,
+                    intensity: intensity
+                )
+                let valleyCenter = sin(positionZ * 0.055 + time * 0.10 + Float(style.variant) * 0.22) * (style.elevated ? 7.5 : 4.8)
+                let waterCorridor = exp(-abs(positionX - valleyCenter) * style.valleyWidth) * style.waterAmount
+
+                if style.cityDensity > 0, seed < style.cityDensity, waterCorridor < 0.58 {
+                    let sizeSeed = hash(SIMD2<Float>(seed, 2.3))
+                    let height = cityBuildingHeight(style, seed: seed, sizeSeed: sizeSeed, frame: frame)
+                    let base = SIMD3<Float>(positionX, groundY + height * 0.5, positionZ)
+                    let footprint = cityFootprint(style, seed: seed, cell: cell)
+                    let color = cityColor(style, seed: seed, frame: frame, palette: palette)
+                    appendBox(
+                        &vertices,
+                        center: base,
+                        size: SIMD3<Float>(footprint.x, height, footprint.y),
+                        color: SIMD4<Float>(color.x, color.y, color.z, 1)
+                    )
+                    if seed < style.cityDensity * 0.20 {
+                        appendBox(
+                            &vertices,
+                            center: SIMD3<Float>(positionX, groundY + height + 0.18, positionZ),
+                            size: SIMD3<Float>(footprint.x * 0.16, 0.36 + frame.trebleEnergy * 0.25, footprint.y * 0.16),
+                            color: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 1)
+                        )
+                    }
+                    if style.biome == .city || style.biome == .oldTown || style.biome == .spaceport {
+                        appendMovingSilhouette(
+                            &vertices,
+                            position: SIMD3<Float>(
+                                positionX + sin(time * 1.2 + seed * 12.0) * footprint.x * 0.40,
+                                groundY,
+                                positionZ + cos(time * 0.9 + seed * 8.0) * footprint.y * 0.40
+                            ),
+                            scale: 0.22 + hash(SIMD2<Float>(seed, 9.1)) * 0.10,
+                            color: SIMD4<Float>(0.02, 0.025, 0.03, 1)
+                        )
+                    }
+                } else if style.ruinDensity > 0, seed < style.ruinDensity, waterCorridor < 0.50 {
+                    appendRuin(
+                        &vertices,
+                        position: SIMD3<Float>(positionX, groundY, positionZ),
+                        seed: seed,
+                        style: style,
+                        palette: palette,
+                        frame: frame
+                    )
+                } else if style.forestDensity > 0, seed < style.forestDensity, waterCorridor < 0.72 {
+                    appendTree(
+                        &vertices,
+                        position: SIMD3<Float>(positionX, groundY, positionZ),
+                        seed: seed,
+                        style: style,
+                        palette: palette,
+                        frame: frame
+                    )
+                }
+                x += cell
+            }
+            z += cell
+        }
+
+        if style.waterAmount > 0.55 || style.cityDensity > 0.25 {
+            appendRoadOrRiverGuides(
+                into: &vertices,
+                startZ: startZ,
+                depth: depth,
+                style: style,
+                frame: frame,
+                palette: palette,
+                time: time,
+                intensity: intensity
+            )
+        }
+    }
+
+    private func appendTree(
+        _ vertices: inout [TerrainVertex],
+        position: SIMD3<Float>,
+        seed: Float,
+        style: MeshWorldStyle,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame
+    ) {
+        let height = (1.2 + hash(SIMD2<Float>(seed, 3.2)) * 2.4) * style.objectScale
+        let trunkHeight = height * 0.34
+        let trunkColor = biomeRockColor(style, palette: palette) * 0.55
+        appendBox(
+            &vertices,
+            center: SIMD3<Float>(position.x, position.y + trunkHeight * 0.5, position.z),
+            size: SIMD3<Float>(0.10 * style.objectScale, trunkHeight, 0.10 * style.objectScale),
+            color: SIMD4<Float>(trunkColor.x, trunkColor.y, trunkColor.z, 1)
+        )
+
+        let leafBase = leafColor(style, seed: seed, palette: palette, frame: frame)
+        let radius = (0.42 + hash(SIMD2<Float>(seed, 4.1)) * 0.34) * style.objectScale
+        let baseY = position.y + trunkHeight
+        let top = SIMD3<Float>(position.x, position.y + height, position.z)
+        for segment in 0..<7 {
+            let a0 = Float(segment) / 7 * Float.pi * 2
+            let a1 = Float(segment + 1) / 7 * Float.pi * 2
+            let p0 = SIMD3<Float>(position.x + cos(a0) * radius, baseY, position.z + sin(a0) * radius)
+            let p1 = SIMD3<Float>(position.x + cos(a1) * radius, baseY, position.z + sin(a1) * radius)
+            let normal = simd_normalize(simd_cross(p1 - p0, top - p0))
+            let color = SIMD4<Float>(leafBase.x, leafBase.y, leafBase.z, 1)
+            appendTerrainVertex(&vertices, position: p0, normal: normal, color: color)
+            appendTerrainVertex(&vertices, position: p1, normal: normal, color: color)
+            appendTerrainVertex(&vertices, position: top, normal: normal, color: color)
+        }
+    }
+
+    private func appendRuin(
+        _ vertices: inout [TerrainVertex],
+        position: SIMD3<Float>,
+        seed: Float,
+        style: MeshWorldStyle,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame
+    ) {
+        let stone = biomeRockColor(style, palette: palette) + palette.2 * (0.06 + frame.trebleEnergy * 0.05)
+        let blockCount = 2 + Int(hash(SIMD2<Float>(seed, 5.2)) * 3)
+        for block in 0..<blockCount {
+            let bf = Float(block)
+            let offset = SIMD3<Float>(
+                (hash(SIMD2<Float>(seed, bf + 1)) - 0.5) * 2.0,
+                0,
+                (hash(SIMD2<Float>(seed, bf + 2)) - 0.5) * 2.0
+            )
+            let height = 0.45 + hash(SIMD2<Float>(seed, bf + 3)) * 2.4
+            appendBox(
+                &vertices,
+                center: SIMD3<Float>(position.x + offset.x, position.y + height * 0.5, position.z + offset.z),
+                size: SIMD3<Float>(0.55 + bf * 0.08, height, 0.50 + bf * 0.05),
+                color: SIMD4<Float>(stone.x, stone.y, stone.z, 1)
+            )
+        }
+    }
+
+    private func appendMovingSilhouette(
+        _ vertices: inout [TerrainVertex],
+        position: SIMD3<Float>,
+        scale: Float,
+        color: SIMD4<Float>
+    ) {
+        appendBox(
+            &vertices,
+            center: SIMD3<Float>(position.x, position.y + scale * 0.55, position.z),
+            size: SIMD3<Float>(scale * 0.28, scale * 1.10, scale * 0.18),
+            color: color
+        )
+    }
+
+    private func appendRoadOrRiverGuides(
+        into vertices: inout [TerrainVertex],
+        startZ: Float,
+        depth: Float,
+        style: MeshWorldStyle,
+        frame: VisualAudioFrame,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        time: Float,
+        intensity: Float
+    ) {
+        let segments = 42
+        let width = style.cityDensity > 0.25 ? Float(1.2) : Float(2.6 + style.waterAmount * 1.6)
+        for index in 0..<segments {
+            let z0 = startZ + Float(index) / Float(segments) * depth
+            let z1 = startZ + Float(index + 1) / Float(segments) * depth
+            let x0 = sin(z0 * 0.055 + time * 0.10 + Float(style.variant) * 0.22) * (style.elevated ? 7.5 : 4.8)
+            let x1 = sin(z1 * 0.055 + time * 0.10 + Float(style.variant) * 0.22) * (style.elevated ? 7.5 : 4.8)
+            let y0 = terrainHeight(x: x0, z: z0, time: time, frame: frame, style: style, intensity: intensity) + 0.045
+            let y1 = terrainHeight(x: x1, z: z1, time: time, frame: frame, style: style, intensity: intensity) + 0.045
+            let color3 = style.cityDensity > 0.25
+                ? palette.2 * (0.34 + frame.beatPulse * 0.18)
+                : mix(SIMD3<Float>(0.04, 0.14, 0.22), palette.0, 0.38 + frame.trebleEnergy * 0.12)
+            appendFlatStrip(
+                &vertices,
+                p0: SIMD3<Float>(x0, y0, z0),
+                p1: SIMD3<Float>(x1, y1, z1),
+                halfWidth: width,
+                color: SIMD4<Float>(color3.x, color3.y, color3.z, 1)
+            )
+        }
+    }
+
+    private func appendFlatStrip(
+        _ vertices: inout [TerrainVertex],
+        p0: SIMD3<Float>,
+        p1: SIMD3<Float>,
+        halfWidth: Float,
+        color: SIMD4<Float>
+    ) {
+        let direction = simd_normalize(SIMD2<Float>(p1.x - p0.x, p1.z - p0.z))
+        let side = SIMD2<Float>(-direction.y, direction.x) * halfWidth
+        let normal = SIMD3<Float>(0, 1, 0)
+        let a = SIMD3<Float>(p0.x + side.x, p0.y, p0.z + side.y)
+        let b = SIMD3<Float>(p0.x - side.x, p0.y, p0.z - side.y)
+        let c = SIMD3<Float>(p1.x + side.x, p1.y, p1.z + side.y)
+        let d = SIMD3<Float>(p1.x - side.x, p1.y, p1.z - side.y)
+        appendTerrainVertex(&vertices, position: a, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: b, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: c, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: b, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: d, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: c, normal: normal, color: color)
+    }
+
+    private func appendBox(
+        _ vertices: inout [TerrainVertex],
+        center: SIMD3<Float>,
+        size: SIMD3<Float>,
+        color: SIMD4<Float>
+    ) {
+        let h = size * 0.5
+        let minP = center - h
+        let maxP = center + h
+        let p000 = SIMD3<Float>(minP.x, minP.y, minP.z)
+        let p001 = SIMD3<Float>(minP.x, minP.y, maxP.z)
+        let p010 = SIMD3<Float>(minP.x, maxP.y, minP.z)
+        let p011 = SIMD3<Float>(minP.x, maxP.y, maxP.z)
+        let p100 = SIMD3<Float>(maxP.x, minP.y, minP.z)
+        let p101 = SIMD3<Float>(maxP.x, minP.y, maxP.z)
+        let p110 = SIMD3<Float>(maxP.x, maxP.y, minP.z)
+        let p111 = SIMD3<Float>(maxP.x, maxP.y, maxP.z)
+        appendFace(&vertices, p000, p100, p010, p110, SIMD3<Float>(0, 0, -1), color)
+        appendFace(&vertices, p101, p001, p111, p011, SIMD3<Float>(0, 0, 1), color)
+        appendFace(&vertices, p001, p000, p011, p010, SIMD3<Float>(-1, 0, 0), color)
+        appendFace(&vertices, p100, p101, p110, p111, SIMD3<Float>(1, 0, 0), color)
+        appendFace(&vertices, p010, p110, p011, p111, SIMD3<Float>(0, 1, 0), color)
+    }
+
+    private func appendFace(
+        _ vertices: inout [TerrainVertex],
+        _ a: SIMD3<Float>,
+        _ b: SIMD3<Float>,
+        _ c: SIMD3<Float>,
+        _ d: SIMD3<Float>,
+        _ normal: SIMD3<Float>,
+        _ color: SIMD4<Float>
+    ) {
+        appendTerrainVertex(&vertices, position: a, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: b, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: c, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: b, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: d, normal: normal, color: color)
+        appendTerrainVertex(&vertices, position: c, normal: normal, color: color)
+    }
+
+    private func cityBuildingHeight(_ style: MeshWorldStyle, seed: Float, sizeSeed: Float, frame: VisualAudioFrame) -> Float {
+        let densityScale = 2.8 + style.cityDensity * 9.0
+        let skyline = pow(sizeSeed, style.variant == 25 ? 0.45 : 0.78)
+        let pulse = frame.smoothedBass * (0.22 + style.cityDensity * 0.35)
+        switch style.biome {
+        case .oldTown, .village:
+            return 0.9 + skyline * 2.2 + pulse
+        case .spaceport, .industrial, .harbor:
+            return 1.2 + skyline * 5.5 + pulse
+        case .citadel:
+            return 1.8 + skyline * 7.0 + pulse
+        default:
+            return 1.3 + skyline * densityScale + pulse
+        }
+    }
+
+    private func cityFootprint(_ style: MeshWorldStyle, seed: Float, cell: Float) -> SIMD2<Float> {
+        let base = style.biome == .oldTown || style.biome == .village ? Float(0.34) : Float(0.46)
+        return SIMD2<Float>(
+            cell * (base + hash(SIMD2<Float>(seed, 6.1)) * 0.28),
+            cell * (base + hash(SIMD2<Float>(seed, 7.4)) * 0.28)
+        )
+    }
+
+    private func cityColor(
+        _ style: MeshWorldStyle,
+        seed: Float,
+        frame: VisualAudioFrame,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>)
+    ) -> SIMD3<Float> {
+        let windowPulse = 0.05 + frame.trebleEnergy * 0.09 + frame.beatPulse * 0.06
+        switch style.biome {
+        case .oldTown, .village:
+            return mix(SIMD3<Float>(0.30, 0.22, 0.16), palette.1 * 0.44, 0.28) + SIMD3<Float>(windowPulse, windowPulse * 0.55, windowPulse * 0.20)
+        case .industrial:
+            return mix(SIMD3<Float>(0.16, 0.17, 0.18), palette.0 * 0.24, 0.34) + palette.1 * windowPulse
+        case .spaceport:
+            return mix(SIMD3<Float>(0.20, 0.23, 0.27), palette.2 * 0.34, 0.42) + palette.2 * windowPulse
+        default:
+            return mix(SIMD3<Float>(0.12, 0.14, 0.18), palette.2 * 0.38, 0.38 + hash(SIMD2<Float>(seed, 2.8)) * 0.26) + palette.2 * windowPulse
+        }
+    }
+
+    private func leafColor(
+        _ style: MeshWorldStyle,
+        seed: Float,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        frame: VisualAudioFrame
+    ) -> SIMD3<Float> {
+        switch style.biome {
+        case .savanna:
+            return SIMD3<Float>(0.42, 0.38, 0.15) + palette.1 * 0.08
+        case .frozen:
+            return SIMD3<Float>(0.55, 0.66, 0.68) + palette.2 * 0.08
+        case .forest:
+            let autumn = style.variant == 6 ? Float(0.65) : 0
+            return mix(SIMD3<Float>(0.08, 0.30, 0.14), SIMD3<Float>(0.76, 0.32, 0.10), autumn) + palette.1 * (0.08 + frame.smoothedBass * 0.035)
+        case .tropical:
+            return SIMD3<Float>(0.06, 0.38, 0.18) + palette.1 * 0.14
+        default:
+            return SIMD3<Float>(0.10, 0.28, 0.16) + palette.1 * 0.10 + palette.2 * frame.trebleEnergy * 0.025
+        }
+    }
+
+    private func terrainFrequency(_ style: MeshWorldStyle, base: Float) -> Float {
+        switch style.biome {
+        case .desert, .savanna:
+            return base * 0.72
+        case .city, .oldTown, .industrial, .harbor, .spaceport:
+            return base * 0.58
+        case .canyon, .volcanic, .crystal:
+            return base * 1.18
+        default:
+            return base
+        }
+    }
+
+    private func biomeHeightScale(_ style: MeshWorldStyle) -> Float {
+        switch style.biome {
+        case .city, .oldTown, .industrial, .harbor, .spaceport, .village:
+            return 0.38
+        case .desert, .savanna, .wetland:
+            return 0.46
+        case .canyon, .mountain, .frozen:
+            return 1.12
+        case .floating:
+            return 0.82
+        default:
+            return 0.82
+        }
+    }
+
+    private func lavaLift(_ style: MeshWorldStyle, ridges: Float) -> Float {
+        guard style.lavaAmount > 0 else { return 0 }
+        return smoothstep(0.72, 1.0, ridges) * style.lavaAmount * 0.45
+    }
+
+    private func biomeGroundColor(_ style: MeshWorldStyle, palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>)) -> SIMD3<Float> {
+        switch style.biome {
+        case .desert:
+            return mix(SIMD3<Float>(0.56, 0.39, 0.18), palette.1 * 0.42, 0.30)
+        case .canyon, .volcanic:
+            return mix(SIMD3<Float>(0.40, 0.16, 0.10), palette.0 * 0.36, 0.28)
+        case .wetland:
+            return SIMD3<Float>(0.08, 0.18, 0.13)
+        case .savanna:
+            return SIMD3<Float>(0.34, 0.30, 0.12)
+        case .frozen:
+            return SIMD3<Float>(0.38, 0.46, 0.48)
+        case .tropical:
+            return SIMD3<Float>(0.06, 0.32, 0.17)
+        case .city, .harbor, .oldTown, .industrial, .spaceport:
+            return SIMD3<Float>(0.12, 0.13, 0.14)
+        case .crystal:
+            return mix(SIMD3<Float>(0.18, 0.16, 0.28), palette.2 * 0.42, 0.46)
+        default:
+            return mix(SIMD3<Float>(0.12, 0.30, 0.20), palette.1 * 0.46, 0.38)
+        }
+    }
+
+    private func biomeRockColor(_ style: MeshWorldStyle, palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>)) -> SIMD3<Float> {
+        switch style.biome {
+        case .desert, .canyon:
+            return SIMD3<Float>(0.46, 0.28, 0.16)
+        case .volcanic:
+            return SIMD3<Float>(0.13, 0.10, 0.10) + palette.0 * 0.10
+        case .frozen:
+            return SIMD3<Float>(0.44, 0.50, 0.54)
+        case .city, .industrial, .spaceport:
+            return SIMD3<Float>(0.18, 0.20, 0.22)
+        case .crystal:
+            return palette.2 * 0.48 + SIMD3<Float>(0.12, 0.14, 0.20)
+        default:
+            return mix(SIMD3<Float>(0.22, 0.23, 0.25), palette.0 * 0.34, 0.32)
+        }
+    }
+
+    private func nightFactor(_ style: MeshWorldStyle) -> Float {
+        switch style.biome {
+        case .city, .harbor, .industrial, .spaceport, .wetland:
+            return 0.65
+        case .frozen:
+            return style.variant == 33 ? 0.62 : 0.25
+        default:
+            return 0.12
+        }
+    }
+
+    private func heatFactor(_ style: MeshWorldStyle) -> Float {
+        switch style.biome {
+        case .desert, .savanna, .canyon, .volcanic:
+            return 0.85
+        default:
+            return 0.15
+        }
     }
 
     private func appendCinematicBackdrop(

@@ -106,9 +106,72 @@ public enum PresetCatalog {
             category: .journey,
             defaultSettings: PresetSettings(intensity: 0.82, sensitivity: 0.64, palette: .prism, smoothing: 0.80, motionAmount: 0.68, glowAmount: 0.80, beatReactivity: 0.60)
         )
-    ]
+    ] + worldPresets
 
     public static func descriptor(for id: VisualPresetID) -> VisualPresetDescriptor {
         presets.first { $0.id == id } ?? presets[0]
+    }
+
+    private static let worldPresets: [VisualPresetDescriptor] = [
+        worldPreset(.forestCanopyFlight, "Dense green canopy flight with layered trees, mist, and soft bass-lit clearings.", .aurora, 0.78, 0.58, 0.72),
+        worldPreset(.riverValleyFlight, "Low flight through a winding river valley with forested banks and reflective water paths.", .aurora, 0.80, 0.60, 0.74),
+        worldPreset(.alpinePass, "High mountain pass with snow caps, cliffs, and bright atmospheric fog.", .graphite, 0.82, 0.58, 0.70),
+        worldPreset(.stormRidge, "Dark ridgeline flight with heavier clouds, sharper peaks, and thunder-like bass pulses.", .magma, 0.80, 0.56, 0.68),
+        worldPreset(.autumnForest, "Warm forest valley with amber terrain, dense tree silhouettes, and glowing trail edges.", .magma, 0.78, 0.58, 0.70),
+        worldPreset(.desertDunes, "Open desert dune traversal with wide horizons, city mirages, and rolling sand ridges.", .magma, 0.78, 0.54, 0.66),
+        worldPreset(.canyonRun, "Fast canyon corridor with layered red rock, river cuts, and treble-lit cliff faces.", .magma, 0.82, 0.58, 0.72),
+        worldPreset(.glacialFjord, "Icy fjord flight with cold peaks, water channels, and glassy blue mineral highlights.", .graphite, 0.80, 0.54, 0.68),
+        worldPreset(.coastalCliffs, "Coastal cliff run over water, green ridges, and hazy horizon light.", .aurora, 0.80, 0.58, 0.72),
+        worldPreset(.volcanicBadlands, "Volcanic terrain with dark rock, lava seams, and bass-reactive red glow.", .magma, 0.84, 0.58, 0.70),
+        worldPreset(.bambooRain, "Rainy bamboo valley with vertical groves, muted greens, and soft moving mist.", .aurora, 0.76, 0.54, 0.66),
+        worldPreset(.redwoodTrail, "Tall redwood corridor with huge trunks, shadowed valleys, and deep forest color.", .aurora, 0.82, 0.56, 0.68),
+        worldPreset(.moonlitMarsh, "Moonlit wetland with low water, sparse trees, and cool treble shimmer.", .graphite, 0.76, 0.54, 0.64),
+        worldPreset(.savannaSunset, "Golden savanna flight with open land, scattered trees, and warm sunset fog.", .magma, 0.78, 0.54, 0.66),
+        worldPreset(.tundraLights, "Frozen tundra with aurora bands, snow fields, and subtle beat-lit ridges.", .aurora, 0.78, 0.54, 0.64),
+        worldPreset(.cherryBlossomValley, "Soft pink valley with blossom-like treetops, river bends, and bright haze.", .prism, 0.76, 0.54, 0.66),
+        worldPreset(.rainforestTemple, "Rainforest temple flythrough with dense vegetation, ruins, and glowing stone paths.", .aurora, 0.82, 0.56, 0.68),
+        worldPreset(.islandArchipelago, "Island-hopping flight over water channels, cliffs, and tropical green ridges.", .aurora, 0.80, 0.56, 0.70),
+        worldPreset(.neonCityFlyover, "Night city flyover with skyline blocks, neon windows, roads, and audio-lit towers.", .prism, 0.84, 0.58, 0.70),
+        worldPreset(.rainCity, "Rainy city landscape with cool fog, reflective canals, and dense building silhouettes.", .graphite, 0.80, 0.54, 0.66),
+        worldPreset(.sunsetSkyline, "Warm skyline cruise through towers, bridges, and glowing horizon haze.", .magma, 0.80, 0.54, 0.66),
+        worldPreset(.cyberHarbor, "Cyberpunk harbor with city blocks, water lanes, docks, and pulsing neon strips.", .prism, 0.84, 0.58, 0.70),
+        worldPreset(.oldTownCanals, "Historic canal city with low buildings, water corridors, and warm window light.", .magma, 0.78, 0.52, 0.64),
+        worldPreset(.megaCityGrid, "Massive grid city with tall towers, road canyons, and beat-reactive window fields.", .prism, 0.86, 0.58, 0.72),
+        worldPreset(.rooftopChase, "Low rooftop flight across blocky towers, antennas, and tiny moving silhouettes.", .graphite, 0.82, 0.56, 0.70),
+        worldPreset(.industrialDocks, "Industrial docklands with block structures, water cuts, and orange signal lights.", .magma, 0.80, 0.54, 0.66),
+        worldPreset(.desertCity, "Sandstone city emerging from dunes, with roads, towers, and hot atmospheric glow.", .magma, 0.80, 0.54, 0.66),
+        worldPreset(.mountainCitadel, "Mountain citadel route with fortified ridges, high towers, and glowing roads.", .aurora, 0.84, 0.56, 0.70),
+        worldPreset(.floatingCity, "Fantasy floating-city flight with elevated terrain, towers, and luminous sky haze.", .prism, 0.84, 0.56, 0.70),
+        worldPreset(.crystalMesa, "Crystal mesa landscape with angular ridges, mineral spires, and treble-lit seams.", .prism, 0.84, 0.54, 0.68),
+        worldPreset(.snowVillage, "Snowy village flyover with cottages, trees, cold fog, and warm window pulses.", .graphite, 0.78, 0.52, 0.64),
+        worldPreset(.auroraPeaks, "Aurora mountain flight with tall snowy peaks and color bands rippling overhead.", .aurora, 0.82, 0.54, 0.66),
+        worldPreset(.riverCity, "City built along a winding river, with bridges, skyline blocks, and water glow.", .prism, 0.82, 0.56, 0.68),
+        worldPreset(.templeRuins, "Ancient temple valley with stone blocks, forest growth, and bass-lit ruin paths.", .aurora, 0.82, 0.54, 0.66),
+        worldPreset(.spaceportDawn, "Dawn spaceport with runway corridors, towers, and futuristic city silhouettes.", .prism, 0.84, 0.56, 0.70)
+    ]
+
+    private static func worldPreset(
+        _ id: VisualPresetID,
+        _ description: String,
+        _ palette: ColorPalette,
+        _ intensity: Double,
+        _ sensitivity: Double,
+        _ motion: Double
+    ) -> VisualPresetDescriptor {
+        VisualPresetDescriptor(
+            id: id,
+            name: id.name,
+            description: description,
+            category: .journey,
+            defaultSettings: PresetSettings(
+                intensity: intensity,
+                sensitivity: sensitivity,
+                palette: palette,
+                smoothing: 0.80,
+                motionAmount: motion,
+                glowAmount: 0.76,
+                beatReactivity: 0.56
+            )
+        )
     }
 }

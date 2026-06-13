@@ -6,6 +6,7 @@ final class PresetCatalogTests: XCTestCase {
     func testCatalogContainsEveryPresetIdExactlyOnce() {
         let ids = PresetCatalog.presets.map(\.id)
 
+        XCTAssertEqual(PresetCatalog.presets.count, 50)
         XCTAssertEqual(Set(ids), Set(VisualPresetID.allCases))
         XCTAssertEqual(ids.count, Set(ids).count)
     }
@@ -39,8 +40,11 @@ final class PresetCatalogTests: XCTestCase {
 
     func testMeshWorldPresetsAreExplicit() {
         let meshPresets = PresetCatalog.presets.filter { $0.id.usesMeshWorld }
+        let variants = meshPresets.compactMap(\.id.meshWorldVariant)
 
-        XCTAssertEqual(Set(meshPresets.map(\.id)), [.terrainFlight, .skyRealmFlight])
+        XCTAssertEqual(meshPresets.count, 37)
+        XCTAssertEqual(variants.count, meshPresets.count)
+        XCTAssertEqual(Set(variants), Set(0...36))
     }
 }
 #endif

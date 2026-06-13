@@ -134,6 +134,18 @@ struct PresetShelfView: View {
             return "cloud.sun.fill"
         case .crystalCavern:
             return "diamond.fill"
+        case .forestCanopyFlight, .autumnForest, .bambooRain, .redwoodTrail, .rainforestTemple, .cherryBlossomValley:
+            return "tree.fill"
+        case .riverValleyFlight, .glacialFjord, .coastalCliffs, .moonlitMarsh, .islandArchipelago, .riverCity, .oldTownCanals, .cyberHarbor:
+            return "water.waves"
+        case .alpinePass, .stormRidge, .tundraLights, .auroraPeaks:
+            return "mountain.2.fill"
+        case .desertDunes, .canyonRun, .volcanicBadlands, .savannaSunset, .desertCity, .crystalMesa:
+            return "sun.max.fill"
+        case .neonCityFlyover, .rainCity, .sunsetSkyline, .megaCityGrid, .rooftopChase, .industrialDocks, .spaceportDawn:
+            return "building.2.fill"
+        case .mountainCitadel, .floatingCity, .snowVillage, .templeRuins:
+            return "building.columns.fill"
         }
     }
 }
