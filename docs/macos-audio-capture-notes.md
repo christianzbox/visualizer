@@ -10,9 +10,11 @@ Spectra uses ScreenCaptureKit because it is the modern public API that can provi
 
 ## Permission
 
-ScreenCaptureKit capture is controlled by macOS privacy permissions. Users may see this as Screen Recording or Screen & System Audio Recording depending on OS version.
+ScreenCaptureKit capture is controlled by macOS privacy permissions. Users may see this as Screen Recording or Screen & System Audio Recording depending on OS version. This is not the Accessibility permission.
 
-Spectra preflights `CGPreflightScreenCaptureAccess()` before enumerating system sources. If access is missing, it shows a permission message and keeps Test Signal Mode available.
+Spectra asks ScreenCaptureKit for full shareable content directly instead of blocking on `CGPreflightScreenCaptureAccess()`. That keeps app-source enumeration aligned with what ScreenCaptureKit can actually capture, including apps such as Music when macOS grants Screen & System Audio Recording access. If ScreenCaptureKit denies capture, Spectra shows a permission message and keeps Test Signal Mode available.
+
+For local SwiftPM development, use `Scripts/build-debug-app.sh` and launch `.build/Spectra.app` when validating permissions. The script preserves the app bundle path and signs the debug bundle with a local Apple Development or Developer ID identity when one exists, falling back to ad-hoc signing only when no identity is available. Certificate signing gives macOS privacy a stable code requirement for `com.christianzbox.spectra.debug`; ad-hoc signing can tie grants to a rebuild-specific code hash. Raw `swift run Spectra` is useful for quick renderer checks, but macOS may treat it as a command-line executable instead of a stable app identity in Privacy & Security.
 
 ## Fallback
 
@@ -25,6 +27,7 @@ The MVP accepts linear PCM Float32, Int16, and Int32 buffers from ScreenCaptureK
 ## Troubleshooting
 
 - Grant Screen & System Audio Recording permission.
+- If a previously ad-hoc-signed debug build is stuck in a denied state, remove Spectra from Screen & System Audio Recording or run `tccutil reset ScreenCapture com.christianzbox.spectra.debug`, rebuild with `Scripts/build-debug-app.sh`, relaunch `.build/Spectra.app`, and grant access again.
 - Relaunch or refresh sources after changing permission.
 - Prefer System Mix if app-scoped capture does not expose the desired app.
 - Verify visuals with Test Signal Mode before debugging system capture.

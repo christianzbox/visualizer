@@ -6,7 +6,9 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 
 - SwiftUI macOS shell.
 - Metal-backed visualizer view.
-- Five working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform.
+- Thirteen working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, six true iterative fractal presets, and two full-screen journey presets.
+- Cinematic render layers: ambient wash, reflections, waveform veils, galaxy arms, tunnel rays, fractal filaments, and transient sparkle mapped to real audio features.
+- Main-window preset shelf for direct preset changes without opening Settings.
 - Test Signal Mode with sine, bass pulse, noise, and fake beat pattern.
 - Accelerate/vDSP FFT analysis with adaptive band normalization, onset/beat detection, smoothing, silence detection, and level metering.
 - ScreenCaptureKit system mix and experimental app-source capture backend.
@@ -18,7 +20,7 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 - macOS 13 or newer for ScreenCaptureKit system audio capture.
 - Apple Silicon recommended.
 - Xcode can open `Package.swift`. This repository currently builds with Swift Package Manager.
-- The active Command Line Tools are enough for `swift build`, `swift test`, and `swift run SpectraDiagnostics`; a full Xcode install is needed for `xcodebuild` workflows.
+- The active Command Line Tools are enough for `swift build` and `swift run SpectraDiagnostics`. Use full Xcode for XCTest execution.
 
 ## Build And Run
 
@@ -26,6 +28,21 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 swift build
 swift build -c release
 swift run Spectra
+```
+
+For local macOS permission testing, prefer the debug `.app` wrapper so System Settings sees a stable Spectra app identity:
+
+```bash
+Scripts/build-debug-app.sh
+open .build/Spectra.app
+```
+
+The script preserves the `.app` bundle path and signs the debug app bundle after each build. If macOS privacy still drops the grant after major local changes, re-open `.build/Spectra.app`, grant Screen & System Audio Recording again, then quit and relaunch the app.
+
+If a local Apple Development or Developer ID signing identity exists, the script uses it automatically. That gives macOS privacy a stable code requirement for `com.christianzbox.spectra.debug` instead of a rebuild-specific ad-hoc code hash. To force a specific identity:
+
+```bash
+SPECTRA_CODE_SIGN_IDENTITY="Apple Development: you@example.com (TEAMID)" Scripts/build-debug-app.sh
 ```
 
 Open in Xcode:
@@ -37,15 +54,15 @@ open Package.swift
 Run package tests and diagnostics:
 
 ```bash
-swift test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 swift run SpectraDiagnostics
 ```
 
-This machine's active Command Line Tools do not include `XCTest`, so the XCTest files are gated with `#if canImport(XCTest)`. `swift test` verifies the test target compiles under CLT; `SpectraDiagnostics` executes the core FFT, band mapping, silence, beat, smoothing, test signal, and settings persistence checks. In full Xcode, the XCTest files are available normally.
+This machine's active Command Line Tools can build the XCTest bundle but do not include the `xctest` runner. `SpectraDiagnostics` executes the core FFT, band mapping, silence, beat, smoothing, test signal, and settings persistence checks in CLT-only environments. Full Xcode runs the XCTest suite normally.
 
 ## Permissions
 
-System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission. Spectra preflights permission before enumerating system sources, shows a clear recovery message, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
+System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission, not Accessibility. Spectra asks ScreenCaptureKit for capture sources directly, shows a clear recovery message, opens the recording privacy pane from the app, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
 
 Privacy text shown by the app:
 
@@ -58,13 +75,16 @@ Privacy text shown by the app:
 3. Switch Capture Mode to System Mix to capture Mac output.
 4. Grant Screen & System Audio Recording permission if macOS prompts, then refresh sources.
 5. Play audio in any app.
-6. Switch between Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, and Minimal Waveform.
-7. Use the full-screen button or standard macOS full-screen controls.
-8. Adjust sensitivity and intensity, or pin the window as floating.
+6. Switch presets from the main-window preset shelf.
+7. Fractal and journey choices are real shader modes: Mandelbrot, Julia, Burning Ship, Tricorn, Phoenix, Mandelbox Flight, Terrain Flight, and Nebula Voyage.
+8. Use the full-screen button or standard macOS full-screen controls.
+9. Adjust sensitivity, intensity, palette, motion, glow, and beat response, or pin the window as floating.
 
 ## Troubleshooting
 
-- If System Mix does not start, use the in-app permission prompt or open System Settings and grant Screen & System Audio Recording to Spectra.
+- If System Mix does not start, use the in-app recording privacy button or open System Settings and grant Screen & System Audio Recording to Spectra.
+- If Spectra does not appear in Privacy & Security, launch it through `open .build/Spectra.app`; raw `swift run Spectra` launches as a command-line executable and can have an unstable macOS privacy identity.
+- If Spectra is already listed but System Mix still fails after this signing change, remove Spectra from Screen & System Audio Recording, run `tccutil reset ScreenCapture com.christianzbox.spectra.debug`, rebuild with `Scripts/build-debug-app.sh`, launch `.build/Spectra.app`, and grant access again.
 - If permission was just changed, quit and relaunch Spectra or refresh sources.
 - If no real audio is captured, switch to Test Signal Mode to verify the renderer and analysis pipeline.
 - If an app source disappears, refresh sources and select System Mix.
@@ -79,6 +99,7 @@ The CI job runs:
 - `swift package resolve`
 - `swift build`
 - `swift build -c release`
+- `swift test list` with a minimum discovered-test guard
 - `swift test`
 - `swift run SpectraDiagnostics`
 - `swift package describe`
@@ -106,12 +127,14 @@ To make CI required in GitHub:
 6. Play YouTube in a browser.
 7. Verify visualizer reacts.
 8. Switch presets.
-9. Go full-screen.
-10. Toggle floating window mode.
-11. Stop audio and verify visuals settle after the silence hold.
-12. Deny permission and verify friendly error/fallback behavior.
-13. Quit and relaunch; settings persist.
-14. Run `swift run SpectraDiagnostics`.
+9. Try each fractal and journey preset and verify different structure, not only color changes.
+10. Resize the window narrower and verify controls collapse instead of clipping.
+11. Go full-screen.
+12. Toggle floating window mode.
+13. Stop audio and verify visuals settle after the silence hold.
+14. Deny permission and verify friendly error/fallback behavior.
+15. Quit and relaunch; settings persist.
+16. Run `swift run SpectraDiagnostics`.
 
 ## Known Limitations
 
@@ -120,7 +143,7 @@ To make CI required in GitHub:
 - ScreenCaptureKit app-source capture is experimental and depends on macOS permission behavior.
 - `Config/Spectra-Info.plist` contains distribution privacy strings, but a signed `.app` bundle/Xcode project should promote these into bundle settings before distribution.
 - Apple Music metadata uses Apple Events when explicitly queried by future UI and is not required for visualization.
-- The SwiftPM renderer compiles its small Metal shader at runtime for package reliability; a production Xcode target should compile `Shaders.metal`.
+- The SwiftPM renderer compiles its Metal shader at runtime for package reliability; a production Xcode target should compile `Shaders.metal`.
 
 ## Roadmap
 

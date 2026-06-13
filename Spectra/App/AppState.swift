@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import OSLog
 import SpectraCore
 
 @MainActor
@@ -11,6 +12,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var availableSources: [AudioSource] = []
     @Published var currentSource: AudioSource?
+    @Published var recordingPermissionStatus: PermissionStatus = Permissions.screenCaptureStatus
     @Published var settings: UserSettings {
         didSet {
             testSignalEngine.signalType = settings.testSignalType
@@ -22,6 +24,7 @@ final class AppState: ObservableObject {
 
     let frameStore: VisualFrameStore
 
+    private let logger = Logger(subsystem: "com.christianzbox.spectra", category: "capture")
     private let settingsStore = SettingsStore()
     private let pipeline: AudioProcessingPipeline
     private let testSignalEngine: TestSignalCaptureEngine
@@ -44,18 +47,30 @@ final class AppState: ObservableObject {
 
     var selectedPreset: VisualPresetID {
         get { settings.selectedPreset }
-        set { settings.selectedPreset = newValue }
+        set {
+            guard settings.selectedPreset != newValue else { return }
+            updateSettings {
+                $0.selectedPreset = newValue
+                $0.presetSettings = PresetCatalog.descriptor(for: newValue).defaultSettings
+            }
+        }
     }
 
     var presetSettings: PresetSettings {
         get { settings.presetSettings }
-        set { settings.presetSettings = newValue }
+        set { updateSettings { $0.presetSettings = newValue } }
+    }
+
+    var renderSettings: PresetSettings {
+        var output = settings.presetSettings
+        output.reduceMotion = settings.reduceMotion
+        return output
     }
 
     var captureMode: CaptureMode {
         get { settings.captureMode }
         set {
-            settings.captureMode = newValue
+            updateSettings { $0.captureMode = newValue }
             if newValue == .testSignal {
                 currentSource = AudioSource(id: "test-signal", name: "Test Signal", kind: .testSignal)
             }
@@ -65,12 +80,34 @@ final class AppState: ObservableObject {
     var testSignalType: TestSignalType {
         get { settings.testSignalType }
         set {
-            settings.testSignalType = newValue
+            updateSettings { $0.testSignalType = newValue }
             testSignalEngine.signalType = newValue
         }
     }
 
+    func updateSettings(_ update: (inout UserSettings) -> Void) {
+        var next = settings
+        update(&next)
+        settings = next
+    }
+
+    func selectSource(_ source: AudioSource) {
+        currentSource = source
+        updateSettings { settings in
+            settings.selectedSourceId = source.id
+            if source.kind == .application {
+                settings.captureMode = .application
+            } else if source.kind == .systemMix {
+                settings.captureMode = .systemMix
+            } else if source.kind == .testSignal {
+                settings.captureMode = .testSignal
+            }
+        }
+    }
+
     func bootstrap() async {
+        ensureForegroundPresentation()
+        refreshPermissionStatus()
         updateWindowLevel()
         if settings.launchFullScreen {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
@@ -83,16 +120,32 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func ensureForegroundPresentation() {
+        NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        }
+    }
+
     func refreshSources() async {
+        refreshPermissionStatus()
         var sources: [AudioSource] = []
         if let testSource = try? await testSignalEngine.listSources().first {
             sources.append(testSource)
         }
         do {
             sources.append(contentsOf: try await systemAudioEngine.listSources())
+            recordingPermissionStatus = .authorized
+            logger.info("Refreshed capture sources: \(sources.count, privacy: .public)")
             errorMessage = nil
         } catch {
-            errorMessage = formatCaptureError(error)
+            if (error as? AudioCaptureError) == .permissionDenied {
+                recordingPermissionStatus = .notDeterminedOrDenied
+            }
+            let message = formatCaptureError(error)
+            logger.error("Capture source refresh failed: \(message, privacy: .public)")
+            errorMessage = message
         }
         availableSources = sources
         currentSource = sourceForCurrentSettings(from: sources)
@@ -127,16 +180,21 @@ final class AppState: ObservableObject {
             try await engine.start()
             activeEngine = engine
             isCapturing = true
+            if settings.captureMode != .testSignal {
+                recordingPermissionStatus = .authorized
+            }
             statusMessage = "Listening to \(engine.currentSource?.name ?? "audio")"
+            logger.info("Started capture mode=\(self.settings.captureMode.rawValue, privacy: .public) source=\(engine.currentSource?.name ?? "audio", privacy: .public)")
         } catch {
             isCapturing = false
             activeEngine = nil
             let message = formatCaptureError(error)
+            logger.error("Capture start failed: \(message, privacy: .public)")
             errorMessage = message
             statusMessage = "Capture unavailable"
             if settings.captureMode != .testSignal {
                 statusMessage = "Using Test Signal fallback"
-                settings.captureMode = .testSignal
+                captureMode = .testSignal
                 await startCapture(retainedError: message)
             }
         }
@@ -153,6 +211,9 @@ final class AppState: ObservableObject {
 
     func requestSystemCapturePermission() {
         Permissions.requestScreenCaptureAccess()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.refreshPermissionStatus()
+        }
     }
 
     func toggleFullScreen() {
@@ -160,12 +221,15 @@ final class AppState: ObservableObject {
     }
 
     func toggleAlwaysOnTop() {
-        settings.alwaysOnTop.toggle()
-        updateWindowLevel()
+        updateSettings { $0.alwaysOnTop.toggle() }
     }
 
     func updateFramesPerSecond(_ fps: Double) {
         framesPerSecond = fps
+    }
+
+    func refreshPermissionStatus() {
+        recordingPermissionStatus = Permissions.screenCaptureStatus
     }
 
     private func sourceForCurrentSettings(from sources: [AudioSource]) -> AudioSource? {
@@ -204,15 +268,23 @@ final class AudioProcessingPipeline {
     var onFrame: ((VisualAudioFrame) -> Void)?
 
     private let analysisEngine = AudioAnalysisEngine()
-    private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInteractive)
+    private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInitiated)
     private let frameStore: VisualFrameStore
+    private let stateLock = NSLock()
     private var lastUIPublish: TimeInterval = 0
+    private var pendingFrame: AudioBufferFrame?
+    private var drainScheduled = false
 
     init(frameStore: VisualFrameStore) {
         self.frameStore = frameStore
     }
 
     func reset() {
+        stateLock.lock()
+        pendingFrame = nil
+        drainScheduled = false
+        stateLock.unlock()
+
         analysisQueue.sync {
             analysisEngine.reset()
             frameStore.update(.silent)
@@ -221,19 +293,44 @@ final class AudioProcessingPipeline {
     }
 
     func consume(_ frame: AudioBufferFrame) {
+        stateLock.lock()
+        pendingFrame = frame
+        if drainScheduled {
+            stateLock.unlock()
+            return
+        }
+        drainScheduled = true
+        stateLock.unlock()
+
         analysisQueue.async { [weak self] in
-            guard let self else { return }
-            let visualFrame = self.analysisEngine.process(frame)
-            self.frameStore.update(visualFrame)
+            self?.drainPendingFrames()
+        }
+    }
+
+    private func drainPendingFrames() {
+        while let frame = takePendingFrame() {
+            let visualFrame = analysisEngine.process(frame)
+            frameStore.update(visualFrame)
 
             let now = CACurrentMediaTime()
-            if now - self.lastUIPublish > 1.0 / 20.0 {
-                self.lastUIPublish = now
-                DispatchQueue.main.async {
-                    self.onFrame?(visualFrame)
+            if now - lastUIPublish > 1.0 / 20.0 {
+                lastUIPublish = now
+                DispatchQueue.main.async { [weak self] in
+                    self?.onFrame?(visualFrame)
                 }
             }
         }
+    }
+
+    private func takePendingFrame() -> AudioBufferFrame? {
+        stateLock.lock()
+        let frame = pendingFrame
+        pendingFrame = nil
+        if frame == nil {
+            drainScheduled = false
+        }
+        stateLock.unlock()
+        return frame
     }
 }
 

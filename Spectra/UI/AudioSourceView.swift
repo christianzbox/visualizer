@@ -7,14 +7,24 @@ struct AudioSourceView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(appState.isCapturing ? Color.green : Color.gray)
-                    .frame(width: 8, height: 8)
+                ZStack {
+                    Circle()
+                        .fill(sourceTint.opacity(0.22))
+                        .frame(width: 16, height: 16)
+                    Circle()
+                        .fill(sourceTint)
+                        .frame(width: 7, height: 7)
+                }
 
-                Text(appState.currentSource?.name ?? "No Source")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(appState.isCapturing ? "Listening" : "Source")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.46))
+                    Text(appState.currentSource?.name ?? "No Source")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
             }
 
             HStack(spacing: 8) {
@@ -56,8 +66,7 @@ struct AudioSourceView: View {
                     get: { appState.currentSource?.id ?? "" },
                     set: { sourceId in
                         guard let source = appState.availableSources.first(where: { $0.id == sourceId }) else { return }
-                        appState.currentSource = source
-                        appState.settings.selectedSourceId = source.id
+                        appState.selectSource(source)
                         Task { await appState.startCapture() }
                     }
                 )) {
@@ -69,5 +78,12 @@ struct AudioSourceView: View {
                 .labelsHidden()
             }
         }
+    }
+
+    private var sourceTint: Color {
+        if appState.isCapturing {
+            return appState.latestFrame.isSilent ? .yellow : .green
+        }
+        return .gray
     }
 }

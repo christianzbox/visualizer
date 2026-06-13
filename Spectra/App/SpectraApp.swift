@@ -8,11 +8,15 @@ struct SpectraApp: App {
         WindowGroup {
             MainWindowView()
                 .environmentObject(appState)
-                .frame(minWidth: 980, minHeight: 640)
+                .frame(minWidth: 720, minHeight: 500)
                 .task {
                     await appState.bootstrap()
+                    if CommandLine.arguments.contains("--start-capture") {
+                        await appState.startCapture()
+                    }
                 }
         }
+        .defaultSize(width: 1080, height: 700)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Start Visualization") {

@@ -2,6 +2,7 @@ import SpectraCore
 import SwiftUI
 
 struct MainWindowView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @State private var showingSettings = false
 
@@ -10,12 +11,7 @@ struct MainWindowView: View {
             MetalVisualizerView(appState: appState)
                 .ignoresSafeArea()
 
-            LinearGradient(
-                colors: [.black.opacity(0.38), .clear, .black.opacity(0.5)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .allowsHitTesting(false)
+            visualChrome
 
             VStack(spacing: 0) {
                 topBar
@@ -26,7 +22,12 @@ struct MainWindowView: View {
                     noAudioState
                 }
                 Spacer()
+                PresetShelfView()
+                    .frame(maxWidth: 1040)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
                 ControlPanelView()
+                    .frame(maxWidth: 1040)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 16)
             }
@@ -60,34 +61,147 @@ struct MainWindowView: View {
                 .help("Settings")
             }
         }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active else { return }
+            appState.refreshPermissionStatus()
+            Task { await appState.refreshSources() }
+        }
         .background(.black)
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Text("Spectra")
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text(appState.statusMessage)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.68))
-                .lineLimit(1)
-
-            Spacer()
-
-            HStack(spacing: 6) {
-                Image(systemName: "lock.shield")
-                Text("Local audio analysis")
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white.opacity(0.74))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(.black.opacity(0.34), in: Capsule())
+        ViewThatFits(in: .horizontal) {
+            regularTopBar
+            compactTopBar
         }
+        .frame(maxWidth: 1040)
         .padding(.horizontal, 18)
         .padding(.top, 14)
+    }
+
+    private var regularTopBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                brandText
+                statusText
+            }
+            Spacer()
+            currentPresetBadge
+            privacyBadge
+        }
+        .padding(12)
+        .background(.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private var compactTopBar: some View {
+        HStack(spacing: 10) {
+            brandText
+            statusText
+                .minimumScaleFactor(0.72)
+            Spacer(minLength: 8)
+            privacyIcon
+        }
+        .padding(12)
+        .background(.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var brandText: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.cyan)
+            Text("Spectra")
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+        }
+    }
+
+    private var statusText: some View {
+        Text(appState.statusMessage)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.68))
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private var privacyBadge: some View {
+        Button {
+            if appState.recordingPermissionStatus == .authorized {
+                appState.refreshPermissionStatus()
+            } else {
+                appState.requestSystemCapturePermission()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                privacyIcon
+                Text(appState.recordingPermissionStatus == .authorized ? "Recording access on" : "Recording access needed")
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.78))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(permissionTint.opacity(0.18), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(permissionTint.opacity(0.28), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .help(appState.recordingPermissionStatus == .authorized ? "Recording permission is granted" : "Open Screen & System Audio Recording privacy settings")
+    }
+
+    private var privacyIcon: some View {
+        Image(systemName: appState.recordingPermissionStatus == .authorized ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+            .foregroundStyle(permissionTint)
+    }
+
+    private var permissionTint: Color {
+        appState.recordingPermissionStatus == .authorized ? .green : .yellow
+    }
+
+    private var currentPresetBadge: some View {
+        let preset = PresetCatalog.descriptor(for: appState.selectedPreset)
+        return HStack(spacing: 6) {
+            Text(preset.category.label.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.54))
+            Text(preset.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.86))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.white.opacity(0.08), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private var visualChrome: some View {
+        ZStack {
+            LinearGradient(
+                colors: [.black.opacity(0.50), .clear, .black.opacity(0.62)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            LinearGradient(
+                colors: [.cyan.opacity(0.10), .clear, .pink.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.18), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        .allowsHitTesting(false)
     }
 
     private var noAudioState: some View {
@@ -115,7 +229,7 @@ struct MainWindowView: View {
                 Button {
                     appState.requestSystemCapturePermission()
                 } label: {
-                    Label("Open Permission Prompt", systemImage: "lock.open")
+                    Label("Open Recording Privacy Settings", systemImage: "lock.open")
                 }
 
                 Button {
