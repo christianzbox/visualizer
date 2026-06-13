@@ -14,6 +14,8 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
     case mandelboxFlight
     case terrainFlight
     case nebulaVoyage
+    case skyRealmFlight
+    case crystalCavern
 
     public var id: String { rawValue }
 
@@ -32,6 +34,8 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .mandelboxFlight: return "Mandelbox Flight"
         case .terrainFlight: return "Terrain Flight"
         case .nebulaVoyage: return "Nebula Voyage"
+        case .skyRealmFlight: return "Sky Realm Flight"
+        case .crystalCavern: return "Crystal Cavern"
         }
     }
 
@@ -43,7 +47,7 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .tricornPulse: return 3
         case .phoenixField: return 4
         case .mandelboxFlight: return 5
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .nebulaVoyage:
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern:
             return nil
         }
     }
@@ -54,6 +58,8 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
             return fractalMode
         case .terrainFlight: return 6
         case .nebulaVoyage: return 7
+        case .skyRealmFlight: return 8
+        case .crystalCavern: return 9
         case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform:
             return nil
         }

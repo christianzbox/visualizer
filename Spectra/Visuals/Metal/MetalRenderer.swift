@@ -22,13 +22,14 @@ private struct FractalUniforms {
 }
 
 private struct RenderSignalState {
-    private var volume = AttackReleaseEnvelope(initialValue: 0, attack: 0.16, release: 0.92)
-    private var bass = AttackReleaseEnvelope(initialValue: 0, attack: 0.13, release: 0.94)
-    private var mid = AttackReleaseEnvelope(initialValue: 0, attack: 0.20, release: 0.92)
-    private var highMid = AttackReleaseEnvelope(initialValue: 0, attack: 0.22, release: 0.90)
-    private var treble = AttackReleaseEnvelope(initialValue: 0, attack: 0.28, release: 0.88)
-    private var beat = AttackReleaseEnvelope(initialValue: 0, attack: 0.08, release: 0.78)
-    private var onset = AttackReleaseEnvelope(initialValue: 0, attack: 0.10, release: 0.82)
+    private var volume = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.975)
+    private var bass = AttackReleaseEnvelope(initialValue: 0, attack: 0.48, release: 0.982)
+    private var mid = AttackReleaseEnvelope(initialValue: 0, attack: 0.56, release: 0.970)
+    private var highMid = AttackReleaseEnvelope(initialValue: 0, attack: 0.58, release: 0.960)
+    private var treble = AttackReleaseEnvelope(initialValue: 0, attack: 0.62, release: 0.945)
+    private var beat = AttackReleaseEnvelope(initialValue: 0, attack: 0.34, release: 0.900)
+    private var onset = AttackReleaseEnvelope(initialValue: 0, attack: 0.42, release: 0.920)
+    private var spectrumSmoother = SpectrumSmoother(count: 96, attack: 0.58, release: 0.940)
     private(set) var visualTime: Float = 0
 
     mutating func process(
@@ -37,20 +38,37 @@ private struct RenderSignalState {
         deltaTime: TimeInterval
     ) -> VisualAudioFrame {
         let motion = settings.reduceMotion ? Float(0.08) : Float(settings.motionAmount)
-        let smoothedVolume = volume.process(max(frame.smoothedVolume, frame.rms * 2.0), deltaTime: deltaTime)
-        let smoothedBass = bass.process(max(frame.smoothedBass, frame.bassEnergy), deltaTime: deltaTime)
-        let smoothedMid = mid.process(frame.midEnergy, deltaTime: deltaTime)
-        let smoothedHighMid = highMid.process(frame.highMidEnergy, deltaTime: deltaTime)
-        let smoothedTreble = treble.process(max(frame.smoothedTreble, frame.trebleEnergy), deltaTime: deltaTime)
-        let beatTrail = beat.process(max(frame.beatPulse, frame.onsetStrength * 0.42), deltaTime: deltaTime)
-        let onsetTrail = onset.process(frame.onsetStrength, deltaTime: deltaTime)
+        let smoothing = Float(settings.smoothing)
+        let sensitivityGain = 0.48 + Float(settings.sensitivity) * 0.62
+        let beatGain = 0.46 + Float(settings.beatReactivity) * 0.46
+        let easedDelta = deltaTime * Double(0.80 + smoothing * 0.55)
+
+        let volumeInput = shapeEnergy(max(frame.smoothedVolume, frame.rms * 1.18), gain: sensitivityGain, floor: 0.020, power: 1.22, ceiling: 0.86)
+        let bassInput = shapeEnergy(max(frame.smoothedBass, frame.bassEnergy), gain: sensitivityGain * 0.92, floor: 0.026, power: 1.24, ceiling: 0.84)
+        let midInput = shapeEnergy(frame.midEnergy, gain: sensitivityGain * 0.82, floor: 0.022, power: 1.28, ceiling: 0.78)
+        let highMidInput = shapeEnergy(frame.highMidEnergy, gain: sensitivityGain * 0.78, floor: 0.024, power: 1.32, ceiling: 0.74)
+        let trebleInput = shapeEnergy(max(frame.smoothedTreble, frame.trebleEnergy), gain: sensitivityGain * 0.86, floor: 0.030, power: 1.36, ceiling: 0.72)
+        let beatInput = shapeEnergy(frame.beatPulse * 0.70 + frame.onsetStrength * 0.22, gain: beatGain, floor: 0.040, power: 1.50, ceiling: 0.58)
+        let onsetInput = shapeEnergy(frame.onsetStrength, gain: beatGain * 0.74, floor: 0.045, power: 1.55, ceiling: 0.50)
+
+        let smoothedVolume = volume.process(volumeInput, deltaTime: easedDelta)
+        let smoothedBass = bass.process(bassInput, deltaTime: easedDelta)
+        let smoothedMid = mid.process(midInput, deltaTime: easedDelta)
+        let smoothedHighMid = highMid.process(highMidInput, deltaTime: easedDelta)
+        let smoothedTreble = treble.process(trebleInput, deltaTime: easedDelta)
+        let beatTrail = beat.process(beatInput, deltaTime: easedDelta)
+        let onsetTrail = onset.process(onsetInput, deltaTime: easedDelta)
+        let shapedSpectrum = frame.spectrumBands.map {
+            shapeEnergy($0, gain: sensitivityGain * 0.92, floor: 0.018, power: 1.20, ceiling: 0.86)
+        }
+        let smoothedSpectrum = spectrumSmoother.process(shapedSpectrum, deltaTime: easedDelta)
 
         visualTime += Float(deltaTime) * (
-            0.42
-            + motion * 0.30
-            + smoothedVolume * 0.26
-            + smoothedBass * 0.18
-            + beatTrail * 0.20
+            0.30
+            + motion * 0.22
+            + smoothedVolume * 0.11
+            + smoothedBass * 0.08
+            + beatTrail * 0.08
         )
 
         var output = frame
@@ -63,7 +81,15 @@ private struct RenderSignalState {
         output.smoothedTreble = min(1, smoothedTreble)
         output.beatPulse = min(1, beatTrail)
         output.onsetStrength = min(1, onsetTrail)
+        output.spectrumBands = smoothedSpectrum
         return output
+    }
+
+    private func shapeEnergy(_ input: Float, gain: Float, floor: Float, power: Float, ceiling: Float) -> Float {
+        let cleaned = max(0, input - floor) / max(0.001, 1 - floor)
+        let scaled = min(1, cleaned * gain)
+        let shaped = pow(scaled, power)
+        return min(ceiling, shaped)
     }
 }
 
@@ -258,7 +284,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             neonTunnel(into: &vertices, frame: frame, settings: settings, time: time)
         case .minimalWaveform:
             minimalWaveform(into: &vertices, frame: frame, settings: settings, time: time)
-        case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .terrainFlight, .nebulaVoyage:
+        case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .terrainFlight, .nebulaVoyage, .skyRealmFlight, .crystalCavern:
             fractalSurface(into: &vertices, drawableSize: drawableSize)
         }
     }
@@ -959,6 +985,46 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         return fract(p.x * p.y);
     }
 
+    float lerp1(float a, float b, float t) {
+        return a + (b - a) * clamp(t, 0.0, 1.0);
+    }
+
+    float valueNoise(float2 p) {
+        float2 i = floor(p);
+        float2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + float2(1.0, 0.0));
+        float c = hash21(i + float2(0.0, 1.0));
+        float d = hash21(i + float2(1.0, 1.0));
+        float x0 = lerp1(a, b, f.x);
+        float x1 = lerp1(c, d, f.x);
+        return lerp1(x0, x1, f.y);
+    }
+
+    float fbm2(float2 p) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        for (int octave = 0; octave < 5; octave++) {
+            value += valueNoise(p) * amplitude;
+            p = rotate2(p * 2.03 + float2(17.31, 9.17), 0.47);
+            amplitude *= 0.52;
+        }
+        return value;
+    }
+
+    float ridgedFbm(float2 p) {
+        float value = 0.0;
+        float amplitude = 0.56;
+        for (int octave = 0; octave < 5; octave++) {
+            float ridge = 1.0 - abs(valueNoise(p) * 2.0 - 1.0);
+            value += ridge * ridge * amplitude;
+            p = rotate2(p * 2.11 + float2(5.13, 13.71), -0.38);
+            amplitude *= 0.50;
+        }
+        return value;
+    }
+
     float spectralFilament(float2 point, constant FractalUniforms &u) {
         float radius = length(point);
         float angle = atan2(point.y, point.x);
@@ -979,59 +1045,85 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     }
 
     float terrainHeight(float2 p, constant FractalUniforms &u) {
-        float height = 0.0;
-        float amplitude = 0.46;
-        float frequency = 0.42;
-        for (int octave = 0; octave < 6; octave++) {
-            float wave = sin(p.x * frequency + u.time * 0.13 + u.mid * 1.8)
-                * cos(p.y * frequency * 0.82 - u.time * 0.10 + u.bass * 2.2);
-            float cell = hash21(floor(p * frequency * 1.7));
-            height += (wave * 0.74 + (cell - 0.5) * 0.52) * amplitude;
-            amplitude *= 0.50;
-            frequency *= 2.03;
-        }
-        return height * (0.30 + u.intensity * 0.34) + u.bass * 0.12;
+        float2 drift = float2(sin(u.time * 0.045), cos(u.time * 0.038)) * (0.24 + u.motion * 0.22);
+        float broad = fbm2(p * 0.34 + drift);
+        float ridges = ridgedFbm(p * 0.78 + float2(0.0, u.time * 0.035));
+        float detail = fbm2(p * 2.15 + broad * 1.2);
+        float valley = exp(-abs(p.x + sin(p.y * 0.18 + u.time * 0.08) * 1.15) * 0.42);
+        float terraces = sin((broad * 2.8 + ridges * 1.6 + p.y * 0.035) * 6.0) * 0.020;
+        float mountain = pow(max(ridges, 0.0), 1.42) * 1.22 + broad * 0.62 + detail * 0.16;
+        mountain -= valley * (0.18 + u.volume * 0.08);
+        return (mountain - 0.74) * (0.48 + u.intensity * 0.34) + terraces + u.bass * 0.055;
     }
 
     float4 terrainFlight(float2 point, constant FractalUniforms &u) {
-        float speed = 1.20 + u.motion * 3.0 + u.volume * 0.85 + u.beat * 0.70;
+        float speed = 0.72 + u.motion * 1.55 + u.volume * 0.30 + u.beat * 0.22;
         float travel = u.time * speed;
-        float3 camera = float3(sin(travel * 0.10) * 1.3, 0.58 + u.volume * 0.36 + u.bass * 0.20, travel);
-        float3 ray = normalize(float3(point.x * 0.92, point.y * 0.62 - 0.10 + u.mid * 0.08, 1.34));
-        ray.xz = rotate2(ray.xz, sin(travel * 0.07) * 0.18 + u.mid * 0.08);
+        float3 camera = float3(
+            sin(travel * 0.18) * 1.8 + sin(travel * 0.051) * 2.5,
+            0.74 + u.volume * 0.18 + u.bass * 0.10,
+            travel * 2.7
+        );
+        float3 ray = normalize(float3(point.x * 0.94, point.y * 0.66 - 0.18 + u.mid * 0.035, 1.42));
+        ray.xz = rotate2(ray.xz, sin(travel * 0.073) * 0.24 + u.mid * 0.04);
 
-        float3 color = paletteGradient(u.palette, 0.60 + point.y * 0.12) * (0.10 + u.volume * 0.10);
+        float3 skyLow = paletteGradient(u.palette, 0.56 + point.y * 0.08) * 0.22;
+        float3 skyHigh = paletteGradient(u.palette, 0.84 + u.time * 0.018) * 0.12 + float3(0.015, 0.020, 0.035);
+        float skyMix = smoothstep(-0.65, 0.85, point.y);
+        float3 color = lerp3(skyLow, skyHigh, skyMix);
+        float2 sunPos = float2(0.52 + sin(u.time * 0.025) * 0.16, 0.42 + cos(u.time * 0.021) * 0.06);
+        float sun = exp(-length(point - sunPos) * 5.2);
+        color += paletteGradient(u.palette, 0.11) * sun * (0.18 + u.glow * 0.18);
+
         float closest = 10.0;
         float hitAmount = 0.0;
         float t = 0.08;
-        for (int i = 0; i < 64; i++) {
+        float hitHeight = 0.0;
+        float3 hitPosition = camera;
+        for (int i = 0; i < 78; i++) {
             float3 pos = camera + ray * t;
             float height = terrainHeight(pos.xz, u);
             float distanceToGround = pos.y - height;
             closest = min(closest, abs(distanceToGround));
-            if (distanceToGround < 0.018) {
-                float eps = 0.035;
+            if (distanceToGround < 0.012) {
+                float eps = 0.045;
                 float hx = terrainHeight(pos.xz + float2(eps, 0.0), u) - terrainHeight(pos.xz - float2(eps, 0.0), u);
                 float hz = terrainHeight(pos.xz + float2(0.0, eps), u) - terrainHeight(pos.xz - float2(0.0, eps), u);
-                float3 normal = normalize(float3(-hx, 0.08, -hz));
-                float light = clamp(dot(normal, normalize(float3(-0.42, 0.74, -0.48))), 0.0, 1.0);
-                float fog = exp(-t * (0.18 - u.glow * 0.05));
-                float ridge = smoothstep(0.45, 1.0, light) + u.treble * 0.22 + u.beat * 0.18;
-                color = paletteGradient(u.palette, 0.18 + height * 0.22 + t * 0.025)
-                    * (0.20 + light * 0.76 + ridge * 0.20)
-                    * fog;
+                float3 normal = normalize(float3(-hx, 0.12, -hz));
+                float3 lightDirection = normalize(float3(-0.58, 0.78, -0.34));
+                float light = clamp(dot(normal, lightDirection), 0.0, 1.0);
+                float rim = pow(clamp(dot(normal, normalize(float3(0.44, 0.36, -0.80))), 0.0, 1.0), 2.0);
+                float fog = exp(-t * (0.105 - u.glow * 0.025));
+                float ridgeLight = smoothstep(0.42, 0.95, light) + u.treble * 0.12 + u.beat * 0.08;
+                float snow = smoothstep(0.45, 1.05, height + ridgedFbm(pos.xz * 1.4) * 0.18);
+                float river = exp(-abs(pos.x + sin(pos.z * 0.18) * 0.95) * 2.5) * smoothstep(0.38, -0.20, height);
+                float path = exp(-abs(pos.x - sin(pos.z * 0.11 + 1.7) * 1.3) * 1.55) * smoothstep(0.42, -0.08, height);
+                float3 ground = paletteGradient(u.palette, 0.18 + height * 0.30 + t * 0.018) * (0.24 + light * 0.80 + ridgeLight * 0.16);
+                float3 snowColor = float3(0.72, 0.82, 0.86) * (0.35 + light * 0.70);
+                float3 waterColor = paletteGradient(u.palette, 0.58 + u.time * 0.020) * (0.42 + rim * 0.50 + u.glow * 0.16);
+                color = lerp3(ground, snowColor, snow * 0.42);
+                color = lerp3(color, waterColor, river * (0.36 + u.glow * 0.20));
+                color += paletteGradient(u.palette, 0.30) * path * (0.08 + u.bass * 0.08);
+                color += paletteGradient(u.palette, 0.72) * rim * (0.12 + u.glow * 0.20);
+                color *= fog;
+                hitHeight = height;
+                hitPosition = pos;
                 hitAmount = 1.0;
                 break;
             }
-            t += max(0.035, abs(distanceToGround) * 0.32 + t * 0.018);
+            t += max(0.030, abs(distanceToGround) * 0.40 + t * 0.014);
         }
 
-        float horizon = smoothstep(-0.12, 0.52, point.y + u.volume * 0.12);
-        float glow = exp(-closest * (4.0 + u.glow * 6.0)) * (0.12 + u.bass * 0.30 + u.beat * 0.24);
-        color += paletteGradient(u.palette, 0.78 + u.time * 0.05) * horizon * (0.08 + u.glow * 0.18);
+        float horizon = smoothstep(-0.18, 0.58, point.y + u.volume * 0.06);
+        float glow = exp(-closest * (5.2 + u.glow * 7.0)) * (0.08 + u.bass * 0.18 + u.beat * 0.10);
+        float cloud = smoothstep(0.54, 0.90, fbm2(point * float2(2.1, 0.8) + float2(travel * 0.035, u.time * 0.015)));
+        color += paletteGradient(u.palette, 0.78 + u.time * 0.035) * horizon * (0.06 + u.glow * 0.13);
         color += paletteGradient(u.palette, 0.32 + u.treble * 0.20) * glow;
-        color += transientDust(point * 0.82, u) * paletteGradient(u.palette, 0.92);
-        color *= 0.78 + hitAmount * 0.42;
+        color += cloud * (1.0 - hitAmount) * paletteGradient(u.palette, 0.68) * 0.09;
+        color += transientDust(point * 0.74, u) * paletteGradient(u.palette, 0.92) * 0.55;
+        color *= 0.82 + hitAmount * 0.34;
+        color = pow(max(color, float3(0.0)), float3(0.92));
+        color += paletteGradient(u.palette, 0.46 + hitHeight * 0.10) * exp(-length(hitPosition.xz - camera.xz) * 0.075) * hitAmount * 0.035;
         return float4(clamp(color, 0.0, 1.0), 1.0);
     }
 
@@ -1107,6 +1199,112 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         return float4(clamp(color, 0.0, 1.0), 1.0);
     }
 
+    float4 skyRealmFlight(float2 point, constant FractalUniforms &u) {
+        float travel = u.time * (0.34 + u.motion * 0.70 + u.volume * 0.12 + u.beat * 0.10);
+        float2 skyPoint = point + float2(sin(travel * 0.11) * 0.10, cos(travel * 0.07) * 0.035);
+        float3 horizon = paletteGradient(u.palette, 0.56 + skyPoint.y * 0.08) * 0.24 + float3(0.015, 0.020, 0.038);
+        float3 zenith = paletteGradient(u.palette, 0.82 + u.time * 0.018) * 0.11 + float3(0.010, 0.018, 0.034);
+        float3 color = lerp3(horizon, zenith, smoothstep(-0.75, 0.95, skyPoint.y));
+
+        float2 sunPosition = float2(0.48 + sin(u.time * 0.020) * 0.12, 0.34 + cos(u.time * 0.018) * 0.08);
+        float sun = exp(-length(point - sunPosition) * 5.6);
+        float halo = exp(-length(point - sunPosition) * 1.6);
+        color += paletteGradient(u.palette, 0.12) * sun * (0.30 + u.glow * 0.28);
+        color += paletteGradient(u.palette, 0.18) * halo * 0.055;
+
+        float cloud = fbm2(point * float2(1.8, 0.72) + float2(travel * 0.08, u.time * 0.018));
+        float cloudMask = smoothstep(0.48, 0.82, cloud + smoothstep(0.20, 0.92, point.y) * 0.25);
+        color += cloudMask * paletteGradient(u.palette, 0.66) * (0.055 + u.glow * 0.035);
+
+        for (int layer = 0; layer < 10; layer++) {
+            float lf = float(layer);
+            float depth = 1.0 + lf * 0.62;
+            float lane = fract(travel * (0.16 + lf * 0.010) + lf * 0.173);
+            float z = 0.42 + lane * 3.2;
+            float scale = 1.0 / z;
+            float2 center = float2(
+                sin(lf * 2.17 + travel * 0.19) * (0.52 + lf * 0.040),
+                -0.34 + sin(lf * 1.31 + travel * 0.13) * 0.20 + (1.0 - lane) * 0.38
+            ) * scale;
+            float islandSize = (0.22 + hash21(float2(lf, 4.2)) * 0.20) * scale;
+            float2 local = (point - center) / max(islandSize, 0.001);
+            local.x += sin(local.y * 2.4 + lf) * 0.11;
+            float landNoise = ridgedFbm(local * 1.75 + lf);
+            float body = smoothstep(0.90, 0.42, length(local * float2(0.92, 1.42)) + landNoise * 0.20);
+            float top = body * smoothstep(-0.20, 0.22, local.y + landNoise * 0.12);
+            float underside = body * smoothstep(0.28, -0.38, local.y);
+            float grass = smoothstep(-0.05, 0.38, local.y + landNoise * 0.10);
+            float fog = exp(-depth * 0.16);
+            float3 rock = paletteGradient(u.palette, 0.22 + landNoise * 0.20) * (0.26 + fog * 0.28);
+            float3 meadow = paletteGradient(u.palette, 0.42 + landNoise * 0.13) * (0.36 + fog * 0.34 + u.bass * 0.06);
+            float3 islandColor = lerp3(rock, meadow, grass);
+            islandColor += paletteGradient(u.palette, 0.72) * underside * (0.08 + u.glow * 0.08);
+            color = lerp3(color, islandColor, clamp((top + underside * 0.82) * fog, 0.0, 0.78));
+
+            float towerBase = smoothstep(0.055, 0.018, abs(local.x + sin(lf) * 0.15));
+            float towerHeight = smoothstep(-0.10, 0.54, local.y) * smoothstep(1.10, 0.42, local.y);
+            float spire = towerBase * towerHeight * top * step(0.54, hash21(float2(lf, 8.3)));
+            color += paletteGradient(u.palette, 0.88 + lf * 0.03) * spire * fog * (0.22 + u.glow * 0.20);
+        }
+
+        float aurora = spectralFilament(point * float2(0.75, 1.18) + float2(0.0, 0.18), u);
+        color += paletteGradient(u.palette, 0.78 + u.time * 0.025) * aurora * (0.07 + u.treble * 0.08 + u.glow * 0.06);
+        color += transientDust(point * 0.68, u) * paletteGradient(u.palette, 0.95) * 0.42;
+        color = pow(max(color, float3(0.0)), float3(0.90));
+        return float4(clamp(color, 0.0, 1.0), 1.0);
+    }
+
+    float crystalFacet(float2 p, float angle, float sharpness) {
+        float2 q = rotate2(p, angle);
+        float diamond = max(abs(q.x) * 0.72 + abs(q.y) * 1.18, abs(q.x + q.y) * 0.52);
+        return 1.0 - smoothstep(sharpness, 1.0, diamond);
+    }
+
+    float4 crystalCavern(float2 point, constant FractalUniforms &u) {
+        float travel = u.time * (0.42 + u.motion * 0.78 + u.volume * 0.16 + u.beat * 0.10);
+        float radius = length(point * float2(0.92, 1.08));
+        float angle = atan2(point.y, point.x);
+        float tunnel = smoothstep(0.08, 1.34, radius);
+        float3 color = float3(0.006, 0.008, 0.015) + paletteGradient(u.palette, 0.62 + point.y * 0.08) * 0.050;
+
+        float wallNoise = ridgedFbm(float2(angle * 1.7, radius * 3.4 - travel * 0.55));
+        float wall = smoothstep(0.34, 1.05, radius + wallNoise * 0.16);
+        color += paletteGradient(u.palette, 0.18 + wallNoise * 0.32) * wall * (0.11 + u.glow * 0.10);
+
+        for (int layer = 0; layer < 13; layer++) {
+            float lf = float(layer);
+            float depth = fract(travel * (0.18 + lf * 0.004) + lf * 0.137);
+            float scale = 0.30 + depth * 2.55;
+            float side = (hash21(float2(lf, 2.0)) < 0.5) ? -1.0 : 1.0;
+            float lane = side * (0.54 + hash21(float2(lf, 5.0)) * 0.56);
+            float y = -0.22 + sin(lf * 1.9 + travel * 0.36) * 0.42;
+            float2 center = float2(lane / scale, y / scale);
+            float crystalSize = (0.18 + hash21(float2(lf, 9.0)) * 0.18) / scale;
+            float2 local = (point - center) / max(crystalSize, 0.001);
+            float facet = crystalFacet(local, lf * 0.41 + travel * 0.035, 0.46);
+            float core = crystalFacet(local * 1.45 + float2(0.12, -0.08), -lf * 0.22, 0.38);
+            float edge = smoothstep(0.40, 1.00, facet) - smoothstep(0.72, 1.00, facet);
+            float fog = exp(-scale * 0.17);
+            float sparkle = smoothstep(0.70, 0.98, valueNoise(local * 4.0 + lf + u.time * 0.15));
+            float3 crystal = paletteGradient(u.palette, 0.50 + lf * 0.055 + u.treble * 0.08)
+                * (0.22 + core * 0.38 + edge * 0.55 + sparkle * u.treble * 0.20);
+            color += crystal * facet * fog * (0.72 + u.glow * 0.42 + u.beat * 0.18);
+        }
+
+        float path = exp(-abs(point.y + 0.72 + sin(point.x * 3.4 + travel) * 0.025) * 9.0) * smoothstep(0.92, 0.08, abs(point.x));
+        float rune = smoothstep(0.94, 1.0, sin(point.x * 34.0 + travel * 2.6) * 0.5 + 0.5) * path;
+        color += paletteGradient(u.palette, 0.76 + u.time * 0.025) * path * (0.08 + u.bass * 0.10);
+        color += paletteGradient(u.palette, 0.92) * rune * (0.20 + u.glow * 0.18);
+
+        float centerGlow = exp(-radius * (2.2 + u.glow * 1.6));
+        color += paletteGradient(u.palette, 0.60 + u.time * 0.020) * centerGlow * (0.08 + u.volume * 0.08);
+        color += spectralFilament(point * 0.95, u) * paletteGradient(u.palette, 0.83) * (0.05 + u.treble * 0.08);
+        color += transientDust(point * 1.1, u) * paletteGradient(u.palette, 0.98) * 0.45;
+        color *= smoothstep(1.55, 0.08, radius) * 0.72 + wall * 0.42;
+        color = pow(max(color, float3(0.0)), float3(0.88));
+        return float4(clamp(color, 0.0, 1.0), 1.0);
+    }
+
     float4 iterateFractal(float2 point, constant FractalUniforms &u) {
         if (u.mode == 5) {
             return mandelboxFlight(point, u);
@@ -1116,6 +1314,12 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
         if (u.mode == 7) {
             return nebulaVoyage(point, u);
+        }
+        if (u.mode == 8) {
+            return skyRealmFlight(point, u);
+        }
+        if (u.mode == 9) {
+            return crystalCavern(point, u);
         }
 
         float audio = clamp(max(u.volume, sqrt(max(u.rms, 0.0)) * 0.70) * (0.78 + u.sensitivity), 0.0, 1.0);

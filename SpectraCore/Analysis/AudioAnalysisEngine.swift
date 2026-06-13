@@ -6,9 +6,9 @@ public final class AudioAnalysisEngine {
     public let waveformSampleCount: Int
 
     private let rollingSamples: AudioRingBuffer
-    private var volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.24, release: 0.88)
-    private var bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.18, release: 0.9)
-    private var trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.28, release: 0.92)
+    private var volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.46, release: 0.965)
+    private var bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.42, release: 0.972)
+    private var trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.945)
     private var spectrumSmoother: SpectrumSmoother
     private var spectrumNormalizers: [AdaptiveNormalizer]
     private var bandNormalizers: [AdaptiveNormalizer]
@@ -21,19 +21,19 @@ public final class AudioAnalysisEngine {
         self.fftAnalyzer = fftAnalyzer
         self.waveformSampleCount = waveformSampleCount
         self.rollingSamples = AudioRingBuffer(capacity: fftAnalyzer.windowSize)
-        self.spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount)
-        self.spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.18), count: fftAnalyzer.bandCount)
-        self.bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.16), count: 6)
+        self.spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.46, release: 0.91)
+        self.spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.12, fall: 0.9992), count: fftAnalyzer.bandCount)
+        self.bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.10, fall: 0.9994), count: 6)
     }
 
     public func reset() {
         rollingSamples.clear()
-        volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.24, release: 0.88)
-        bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.18, release: 0.9)
-        trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.28, release: 0.92)
-        spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount)
-        spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.18), count: fftAnalyzer.bandCount)
-        bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.16), count: 6)
+        volumeEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.46, release: 0.965)
+        bassEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.42, release: 0.972)
+        trebleEnvelope = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.945)
+        spectrumSmoother = SpectrumSmoother(count: fftAnalyzer.bandCount, attack: 0.46, release: 0.91)
+        spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.12, fall: 0.9992), count: fftAnalyzer.bandCount)
+        bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.10, fall: 0.9994), count: 6)
         onsetDetector = OnsetDetector()
         beatDetector = BeatDetector()
         lastTimestamp = nil
@@ -54,7 +54,7 @@ public final class AudioAnalysisEngine {
         let smoothedSpectrum = spectrumSmoother.process(normalizedSpectrum, deltaTime: deltaTime)
         let normalizedBands = normalizeBands(fft.bandEnergies)
         let onset = onsetDetector.process(spectrum: normalizedSpectrum)
-        let combinedEnergy = min(1, (normalizedBands.bass * 0.48) + (normalizedBands.lowMids * 0.18) + (rms * 1.45))
+        let combinedEnergy = min(1, (normalizedBands.bass * 0.38) + (normalizedBands.lowMids * 0.14) + (rms * 1.10))
         let beat = beatDetector.process(
             energy: combinedEnergy,
             bassEnergy: normalizedBands.bass,
@@ -62,7 +62,7 @@ public final class AudioAnalysisEngine {
             timestamp: frame.timestamp
         )
 
-        let smoothedVolume = volumeEnvelope.process(min(1, rms * 2.4), deltaTime: deltaTime)
+        let smoothedVolume = volumeEnvelope.process(min(1, rms * 1.55), deltaTime: deltaTime)
         let smoothedBass = bassEnvelope.process(normalizedBands.bass, deltaTime: deltaTime)
         let smoothedTreble = trebleEnvelope.process(normalizedBands.treble, deltaTime: deltaTime)
         let belowSilenceThreshold = rms < 0.0015 && peak < 0.006 && smoothedVolume < 0.018
@@ -164,25 +164,25 @@ public final class AudioAnalysisEngine {
     private func normalizeSpectrum(_ spectrum: [Float]) -> [Float] {
         guard !spectrum.isEmpty else { return [] }
         if spectrumNormalizers.count != spectrum.count {
-            spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.18), count: spectrum.count)
+            spectrumNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.12, fall: 0.9992), count: spectrum.count)
         }
         return spectrum.indices.map { index in
-            let shaped = pow(max(0, spectrum[index]), 0.82)
+            let shaped = pow(max(0, spectrum[index]), 1.08)
             return spectrumNormalizers[index].normalize(shaped)
         }
     }
 
     private func normalizeBands(_ bands: BandEnergyResult) -> BandEnergyResult {
         if bandNormalizers.count != 6 {
-            bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.16), count: 6)
+            bandNormalizers = Array(repeating: AdaptiveNormalizer(ceiling: 0.24, rise: 0.10, fall: 0.9994), count: 6)
         }
         return BandEnergyResult(
-            subBass: bandNormalizers[0].normalize(pow(max(0, bands.subBass), 0.86)),
-            bass: bandNormalizers[1].normalize(pow(max(0, bands.bass), 0.82)),
-            lowMids: bandNormalizers[2].normalize(pow(max(0, bands.lowMids), 0.88)),
-            mids: bandNormalizers[3].normalize(pow(max(0, bands.mids), 0.92)),
-            highMids: bandNormalizers[4].normalize(pow(max(0, bands.highMids), 0.94)),
-            treble: bandNormalizers[5].normalize(pow(max(0, bands.treble), 0.82))
+            subBass: bandNormalizers[0].normalize(pow(max(0, bands.subBass), 1.04)),
+            bass: bandNormalizers[1].normalize(pow(max(0, bands.bass), 1.06)),
+            lowMids: bandNormalizers[2].normalize(pow(max(0, bands.lowMids), 1.10)),
+            mids: bandNormalizers[3].normalize(pow(max(0, bands.mids), 1.12)),
+            highMids: bandNormalizers[4].normalize(pow(max(0, bands.highMids), 1.14)),
+            treble: bandNormalizers[5].normalize(pow(max(0, bands.treble), 1.08))
         )
     }
 }

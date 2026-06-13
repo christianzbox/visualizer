@@ -90,7 +90,21 @@ public enum PresetCatalog {
             name: VisualPresetID.nebulaVoyage.name,
             description: "Volumetric tunnel voyage with flowing nebula bands, star dust, and beat-reactive forward motion.",
             category: .journey,
-            defaultSettings: PresetSettings(intensity: 0.84, sensitivity: 0.74, palette: .magma, motionAmount: 0.86, glowAmount: 0.78, beatReactivity: 0.86)
+            defaultSettings: PresetSettings(intensity: 0.78, sensitivity: 0.68, palette: .magma, smoothing: 0.74, motionAmount: 0.74, glowAmount: 0.78, beatReactivity: 0.68)
+        ),
+        VisualPresetDescriptor(
+            id: .skyRealmFlight,
+            name: VisualPresetID.skyRealmFlight.name,
+            description: "High-fantasy sky traversal through floating islands, atmospheric haze, and distant citadel silhouettes.",
+            category: .journey,
+            defaultSettings: PresetSettings(intensity: 0.80, sensitivity: 0.66, palette: .aurora, smoothing: 0.78, motionAmount: 0.70, glowAmount: 0.72, beatReactivity: 0.62)
+        ),
+        VisualPresetDescriptor(
+            id: .crystalCavern,
+            name: VisualPresetID.crystalCavern.name,
+            description: "Game-like cavern flythrough with parallax crystal walls, glowing mineral seams, and bass-lit depth.",
+            category: .journey,
+            defaultSettings: PresetSettings(intensity: 0.82, sensitivity: 0.64, palette: .prism, smoothing: 0.80, motionAmount: 0.68, glowAmount: 0.80, beatReactivity: 0.60)
         )
     ]
 

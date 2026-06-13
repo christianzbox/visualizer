@@ -271,6 +271,8 @@ final class AudioProcessingPipeline {
     private let analysisQueue = DispatchQueue(label: "spectra.analysis", qos: .userInteractive)
     private let frameStore: VisualFrameStore
     private var lastUIPublish: TimeInterval = 0
+    private var pendingFrame: AudioBufferFrame?
+    private var isProcessing = false
 
     init(frameStore: VisualFrameStore) {
         self.frameStore = frameStore
@@ -281,22 +283,33 @@ final class AudioProcessingPipeline {
             analysisEngine.reset()
             frameStore.update(.silent)
             lastUIPublish = 0
+            pendingFrame = nil
+            isProcessing = false
         }
     }
 
     func consume(_ frame: AudioBufferFrame) {
         analysisQueue.async { [weak self] in
             guard let self else { return }
-            let visualFrame = self.analysisEngine.process(frame)
-            self.frameStore.update(visualFrame)
+            self.pendingFrame = frame
+            guard !self.isProcessing else { return }
+            self.isProcessing = true
 
-            let now = CACurrentMediaTime()
-            if now - self.lastUIPublish > 1.0 / 20.0 {
-                self.lastUIPublish = now
-                DispatchQueue.main.async {
-                    self.onFrame?(visualFrame)
+            while let frame = self.pendingFrame {
+                self.pendingFrame = nil
+                let visualFrame = self.analysisEngine.process(frame)
+                self.frameStore.update(visualFrame)
+
+                let now = CACurrentMediaTime()
+                if now - self.lastUIPublish > 1.0 / 20.0 {
+                    self.lastUIPublish = now
+                    DispatchQueue.main.async {
+                        self.onFrame?(visualFrame)
+                    }
                 }
             }
+
+            self.isProcessing = false
         }
     }
 }

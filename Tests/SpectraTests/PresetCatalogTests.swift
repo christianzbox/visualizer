@@ -32,9 +32,9 @@ final class PresetCatalogTests: XCTestCase {
         let shaderPresets = PresetCatalog.presets.filter { $0.id.usesFullscreenShader }
         let modes = shaderPresets.compactMap { $0.id.fullscreenShaderMode }
 
-        XCTAssertEqual(shaderPresets.count, 8)
+        XCTAssertEqual(shaderPresets.count, 10)
         XCTAssertEqual(modes.count, shaderPresets.count)
-        XCTAssertEqual(Set(modes), Set(0...7))
+        XCTAssertEqual(Set(modes), Set(0...9))
     }
 }
 #endif

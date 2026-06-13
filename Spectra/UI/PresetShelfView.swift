@@ -130,6 +130,10 @@ struct PresetShelfView: View {
             return "mountain.2.fill"
         case .nebulaVoyage:
             return "sparkle.magnifyingglass"
+        case .skyRealmFlight:
+            return "cloud.sun.fill"
+        case .crystalCavern:
+            return "diamond.fill"
         }
     }
 }

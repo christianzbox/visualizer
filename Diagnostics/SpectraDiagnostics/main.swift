@@ -197,8 +197,8 @@ struct SpectraDiagnostics {
         try expect(Set(fractalModes) == Set(0...5), "Fractal presets should map to distinct shader formulas")
         let shaderPresets = PresetCatalog.presets.filter { $0.id.usesFullscreenShader }
         let shaderModes = shaderPresets.compactMap { $0.id.fullscreenShaderMode }
-        try expect(shaderPresets.count == 8, "Preset catalog should expose eight full-screen shader choices")
-        try expect(Set(shaderModes) == Set(0...7), "Full-screen shader presets should map to distinct shader modes")
+        try expect(shaderPresets.count == 10, "Preset catalog should expose ten full-screen shader choices")
+        try expect(Set(shaderModes) == Set(0...9), "Full-screen shader presets should map to distinct shader modes")
     }
 
     private static func testCaptureErrors() throws {
