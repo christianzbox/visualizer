@@ -29,6 +29,31 @@ struct FractalUniforms {
     uint palette;
 };
 
+struct TerrainVertex {
+    float4 position;
+    float4 normal;
+    float4 color;
+};
+
+struct TerrainUniforms {
+    float4x4 viewProjectionMatrix;
+    float4 cameraPosition;
+    float4 lightDirection;
+    float4 fogColor;
+    float4 audio;
+    float fogStart;
+    float fogEnd;
+    float time;
+    uint palette;
+};
+
+struct TerrainOut {
+    float4 position [[position]];
+    float3 worldPosition;
+    float3 normal;
+    float4 color;
+};
+
 vertex VertexOut spectra_vertex(uint vertexID [[vertex_id]],
                                 constant SpectraVertex *vertices [[buffer(0)]]) {
     VertexOut out;
@@ -76,6 +101,39 @@ float3 paletteGradient(uint palette, float t) {
     float3 low = float3(0.10, 0.13, 0.14);
     float3 high = float3(0.90, 0.94, 0.90);
     return lerp3(low, high, smoothstep(0.08, 0.92, t));
+}
+
+vertex TerrainOut terrain_vertex(uint vertexID [[vertex_id]],
+                                 constant TerrainVertex *vertices [[buffer(0)]],
+                                 constant TerrainUniforms &uniforms [[buffer(1)]]) {
+    TerrainVertex inputVertex = vertices[vertexID];
+    TerrainOut out;
+    float4 world = float4(inputVertex.position.xyz, 1.0);
+    out.position = uniforms.viewProjectionMatrix * world;
+    out.worldPosition = inputVertex.position.xyz;
+    out.normal = normalize(inputVertex.normal.xyz);
+    out.color = inputVertex.color;
+    return out;
+}
+
+fragment half4 terrain_fragment(TerrainOut input [[stage_in]],
+                                constant TerrainUniforms &uniforms [[buffer(0)]]) {
+    float3 normal = normalize(input.normal);
+    float3 lightDirection = normalize(uniforms.lightDirection.xyz);
+    float3 viewDirection = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+    float diffuse = clamp(dot(normal, lightDirection), 0.0, 1.0);
+    float halfLambert = diffuse * 0.5 + 0.5;
+    float rim = pow(clamp(1.0 - dot(normal, viewDirection), 0.0, 1.0), 2.0);
+    float distanceFromCamera = distance(uniforms.cameraPosition.xyz, input.worldPosition);
+    float fog = smoothstep(uniforms.fogStart, uniforms.fogEnd, distanceFromCamera);
+    float3 paletteLight = paletteGradient(uniforms.palette, 0.68 + uniforms.time * 0.018 + uniforms.audio.z * 0.08);
+    float audioGlow = uniforms.audio.x * 0.055 + uniforms.audio.y * 0.070 + uniforms.audio.w * 0.045;
+    float3 color = input.color.rgb * (0.24 + halfLambert * 0.86);
+    color += paletteLight * (rim * (0.08 + uniforms.audio.z * 0.08) + audioGlow);
+    color += paletteGradient(uniforms.palette, 0.36) * pow(diffuse, 6.0) * (0.05 + uniforms.audio.y * 0.06);
+    color = lerp3(color, uniforms.fogColor.rgb, fog * 0.86);
+    color = pow(max(color, float3(0.0)), float3(0.92));
+    return half4(float4(clamp(color, 0.0, 1.0), 1.0));
 }
 
 float hash21(float2 p) {
@@ -409,15 +467,9 @@ float4 iterateFractal(float2 point, constant FractalUniforms &u) {
         return mandelboxFlight(point, u);
     }
     if (u.mode == 6) {
-        return terrainFlight(point, u);
-    }
-    if (u.mode == 7) {
         return nebulaVoyage(point, u);
     }
-    if (u.mode == 8) {
-        return skyRealmFlight(point, u);
-    }
-    if (u.mode == 9) {
+    if (u.mode == 7) {
         return crystalCavern(point, u);
     }
 

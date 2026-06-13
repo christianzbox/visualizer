@@ -21,6 +21,24 @@ private struct FractalUniforms {
     var palette: UInt32
 }
 
+private struct TerrainVertex {
+    var position: SIMD4<Float>
+    var normal: SIMD4<Float>
+    var color: SIMD4<Float>
+}
+
+private struct TerrainUniforms {
+    var viewProjectionMatrix: simd_float4x4
+    var cameraPosition: SIMD4<Float>
+    var lightDirection: SIMD4<Float>
+    var fogColor: SIMD4<Float>
+    var audio: SIMD4<Float>
+    var fogStart: Float
+    var fogEnd: Float
+    var time: Float
+    var palette: UInt32
+}
+
 private struct RenderSignalState {
     private var volume = AttackReleaseEnvelope(initialValue: 0, attack: 0.52, release: 0.975)
     private var bass = AttackReleaseEnvelope(initialValue: 0, attack: 0.48, release: 0.982)
@@ -103,14 +121,19 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var commandQueue: MTLCommandQueue?
     private var geometryPipelineState: MTLRenderPipelineState?
     private var fractalPipelineState: MTLRenderPipelineState?
+    private var terrainPipelineState: MTLRenderPipelineState?
+    private var terrainDepthState: MTLDepthStencilState?
     private var startTime = CACurrentMediaTime()
     private var lastFrameTime = CACurrentMediaTime()
     private var fpsSampleStart = CACurrentMediaTime()
     private var fpsFrameCount = 0
     private var renderSignalState = RenderSignalState()
     private var reusableVertices: [SpectraVertex] = []
+    private var reusableTerrainVertices: [TerrainVertex] = []
     private var vertexBuffer: MTLBuffer?
     private var vertexCapacity = 0
+    private var terrainVertexBuffer: MTLBuffer?
+    private var terrainVertexCapacity = 0
 
     init(
         frameStore: VisualFrameStore,
@@ -131,6 +154,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         view.delegate = self
         view.preferredFramesPerSecond = 60
         view.colorPixelFormat = .bgra8Unorm
+        view.depthStencilPixelFormat = .depth32Float
+        view.clearDepth = 1.0
         view.framebufferOnly = true
         view.isPaused = false
         view.enableSetNeedsDisplay = false
@@ -139,6 +164,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         if let library = makeShaderLibrary(for: view) {
             self.geometryPipelineState = makePipeline(for: view, library: library, fragmentFunctionName: "spectra_fragment")
             self.fractalPipelineState = makePipeline(for: view, library: library, fragmentFunctionName: "spectra_fractal_fragment")
+            self.terrainPipelineState = makeTerrainPipeline(for: view, library: library)
+            self.terrainDepthState = makeTerrainDepthState(device: device)
         }
     }
 
@@ -167,20 +194,50 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let preset = presetProvider()
         let frame = renderSignalState.process(rawFrame, settings: settings, deltaTime: deltaTime)
         let time = renderSignalState.visualTime + Float(now - startTime) * 0.10
-        let usesFullscreenShader = preset.usesFullscreenShader
+        let usesWorldRenderer = usesMeshWorldRenderer(preset)
+        let usesFullscreenShader = preset.usesFullscreenShader && !usesWorldRenderer
         reusableVertices.removeAll(keepingCapacity: true)
-        appendVertices(
-            into: &reusableVertices,
-            for: preset,
-            frame: frame,
-            settings: settings,
-            time: time,
-            drawableSize: view.drawableSize
-        )
-        if !usesFullscreenShader {
+        reusableTerrainVertices.removeAll(keepingCapacity: true)
+        let terrainUniforms: TerrainUniforms?
+        if usesWorldRenderer {
+            terrainUniforms = makeMeshWorld(
+                into: &reusableTerrainVertices,
+                preset: preset,
+                frame: frame,
+                settings: settings,
+                time: time,
+                drawableSize: view.drawableSize
+            )
+            appendMeshWorldBackdrop(
+                into: &reusableVertices,
+                preset: preset,
+                frame: frame,
+                settings: settings,
+                time: time
+            )
+        } else {
+            terrainUniforms = nil
+            appendVertices(
+                into: &reusableVertices,
+                for: preset,
+                frame: frame,
+                settings: settings,
+                time: time,
+                drawableSize: view.drawableSize
+            )
+        }
+        if !usesFullscreenShader && !usesWorldRenderer {
             applyTraversalTransform(to: &reusableVertices, frame: frame, settings: settings, time: time)
         }
-        guard let pipelineState = usesFullscreenShader ? fractalPipelineState : geometryPipelineState else { return }
+        if usesFullscreenShader, fractalPipelineState == nil {
+            return
+        }
+        if !usesFullscreenShader, geometryPipelineState == nil {
+            return
+        }
+        if usesWorldRenderer, terrainPipelineState == nil {
+            return
+        }
 
         let clear = backgroundColor(for: settings.palette, frame: frame)
         descriptor.colorAttachments[0].clearColor = MTLClearColor(
@@ -195,8 +252,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             return
         }
 
-        encoder.setRenderPipelineState(pipelineState)
         if usesFullscreenShader {
+            guard let fractalPipelineState else { return }
+            encoder.setRenderPipelineState(fractalPipelineState)
             var uniforms = makeFractalUniforms(
                 preset: preset,
                 frame: frame,
@@ -208,6 +266,13 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
         if !reusableVertices.isEmpty,
            let buffer = ensureVertexBuffer(device: device, vertexCount: reusableVertices.count) {
+            if usesFullscreenShader {
+                guard let fractalPipelineState else { return }
+                encoder.setRenderPipelineState(fractalPipelineState)
+            } else {
+                guard let geometryPipelineState else { return }
+                encoder.setRenderPipelineState(geometryPipelineState)
+            }
             let byteCount = MemoryLayout<SpectraVertex>.stride * reusableVertices.count
             reusableVertices.withUnsafeBytes { rawBuffer in
                 if let baseAddress = rawBuffer.baseAddress {
@@ -216,6 +281,25 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             }
             encoder.setVertexBuffer(buffer, offset: 0, index: 0)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: reusableVertices.count)
+        }
+        if usesWorldRenderer,
+           let terrainPipelineState,
+           let terrainDepthState,
+           var terrainUniforms,
+           !reusableTerrainVertices.isEmpty,
+           let buffer = ensureTerrainVertexBuffer(device: device, vertexCount: reusableTerrainVertices.count) {
+            encoder.setRenderPipelineState(terrainPipelineState)
+            encoder.setDepthStencilState(terrainDepthState)
+            let byteCount = MemoryLayout<TerrainVertex>.stride * reusableTerrainVertices.count
+            reusableTerrainVertices.withUnsafeBytes { rawBuffer in
+                if let baseAddress = rawBuffer.baseAddress {
+                    buffer.contents().copyMemory(from: baseAddress, byteCount: byteCount)
+                }
+            }
+            encoder.setVertexBuffer(buffer, offset: 0, index: 0)
+            encoder.setVertexBytes(&terrainUniforms, length: MemoryLayout<TerrainUniforms>.stride, index: 1)
+            encoder.setFragmentBytes(&terrainUniforms, length: MemoryLayout<TerrainUniforms>.stride, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: reusableTerrainVertices.count)
         }
         encoder.endEncoding()
 
@@ -263,6 +347,36 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             assertionFailure("Spectra Metal pipeline creation failed: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func makeTerrainPipeline(for view: MTKView, library: MTLLibrary) -> MTLRenderPipelineState? {
+        guard let device = view.device else { return nil }
+        guard let vertexFunction = library.makeFunction(name: "terrain_vertex"),
+              let fragmentFunction = library.makeFunction(name: "terrain_fragment") else {
+            assertionFailure("Spectra Metal shader library is missing terrain mesh functions.")
+            return nil
+        }
+
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
+        descriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
+        descriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat
+        descriptor.colorAttachments[0].isBlendingEnabled = false
+        do {
+            return try device.makeRenderPipelineState(descriptor: descriptor)
+        } catch {
+            assertionFailure("Spectra Metal terrain pipeline creation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func makeTerrainDepthState(device: MTLDevice?) -> MTLDepthStencilState? {
+        guard let device else { return nil }
+        let descriptor = MTLDepthStencilDescriptor()
+        descriptor.depthCompareFunction = .less
+        descriptor.isDepthWriteEnabled = true
+        return device.makeDepthStencilState(descriptor: descriptor)
     }
 
     private func appendVertices(
@@ -630,6 +744,265 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         )
     }
 
+    private func usesMeshWorldRenderer(_ preset: VisualPresetID) -> Bool {
+        preset.usesMeshWorld
+    }
+
+    private func appendMeshWorldBackdrop(
+        into vertices: inout [SpectraVertex],
+        preset: VisualPresetID,
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float
+    ) {
+        let palette = paletteColors(settings.palette)
+        let glow = Float(settings.glowAmount)
+        let volume = frame.smoothedVolume
+        let sunX = preset == .skyRealmFlight ? Float(0.46) : Float(0.58)
+        let sunY = preset == .skyRealmFlight ? Float(0.42) : Float(0.30)
+        let skyLow = mix(palette.0 * 0.23, palette.1 * 0.20, 0.35 + volume * 0.18)
+        let skyHigh = mix(palette.2 * 0.11, SIMD3<Float>(0.010, 0.018, 0.040), 0.45)
+        let horizon = mix(palette.0 * 0.32, palette.2 * 0.18, 0.35)
+
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -1,
+            x1: 1,
+            y1: 1,
+            bottom: SIMD4<Float>(skyLow.x, skyLow.y, skyLow.z, 1),
+            top: SIMD4<Float>(skyHigh.x, skyHigh.y, skyHigh.z, 1)
+        )
+
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -0.42,
+            x1: 1,
+            y1: 0.22,
+            bottom: SIMD4<Float>(horizon.x, horizon.y, horizon.z, 0.18 + glow * 0.12),
+            top: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, 0.04 + volume * 0.06)
+        )
+
+        for layer in 0..<5 {
+            let lf = Float(layer)
+            let y = 0.02 + lf * 0.12 + sin(time * (0.06 + lf * 0.012) + lf) * 0.025
+            let alpha = 0.028 + glow * 0.018 + frame.trebleEnergy * 0.015
+            appendRibbonSegment(
+                &vertices,
+                x0: -1.05,
+                y0: y,
+                x1: 1.05,
+                y1: y + sin(time * 0.05 + lf * 1.7) * 0.035,
+                halfThickness: 0.018 + lf * 0.006,
+                colorA: SIMD4<Float>(palette.2.x, palette.2.y, palette.2.z, alpha),
+                colorB: SIMD4<Float>(1, 1, 1, alpha * 0.35)
+            )
+        }
+
+        let sunSize = 0.16 + glow * 0.09
+        appendQuad(
+            &vertices,
+            x0: sunX - sunSize,
+            y0: sunY - sunSize,
+            x1: sunX + sunSize,
+            y1: sunY + sunSize,
+            bottom: SIMD4<Float>(palette.1.x, palette.1.y, palette.1.z, 0.06 + glow * 0.04),
+            top: SIMD4<Float>(1, 0.94, 0.72, 0.16 + glow * 0.08)
+        )
+    }
+
+    private func makeMeshWorld(
+        into vertices: inout [TerrainVertex],
+        preset: VisualPresetID,
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float,
+        drawableSize: CGSize
+    ) -> TerrainUniforms {
+        let palette = paletteColors(settings.palette)
+        let motion = settings.reduceMotion ? Float(0.12) : Float(settings.motionAmount)
+        let intensity = Float(settings.intensity)
+        let isSkyRealm = preset == .skyRealmFlight
+        let travel = time * (9.0 + motion * 11.0 + frame.smoothedVolume * 1.5)
+        let cameraX = sin(time * 0.31) * (isSkyRealm ? 6.8 : 4.4) + sin(time * 0.093) * (isSkyRealm ? 7.0 : 3.2)
+        let cameraY = (isSkyRealm ? Float(6.2) : Float(3.0)) + frame.smoothedVolume * 0.85 + frame.smoothedBass * 0.35
+        let camera = SIMD3<Float>(cameraX, cameraY, travel)
+        let target = SIMD3<Float>(
+            cameraX + sin(time * 0.23) * (isSkyRealm ? 5.5 : 3.0),
+            isSkyRealm ? 2.2 + frame.midEnergy * 0.70 : 1.05 + frame.midEnergy * 0.45,
+            travel + (isSkyRealm ? 19.0 : 16.0)
+        )
+        let aspect = max(0.2, Float(drawableSize.width / max(1, drawableSize.height)))
+        let projection = perspectiveMatrix(fovY: Float.pi / 3.05, aspect: aspect, near: 0.08, far: 125)
+        let view = lookAtMatrix(eye: camera, center: target, up: SIMD3<Float>(0, 1, 0))
+        let viewProjection = simd_mul(projection, view)
+
+        let columns = settings.reduceMotion ? 48 : 64
+        let rows = settings.reduceMotion ? 72 : 92
+        let worldWidth = isSkyRealm ? Float(58) : Float(48)
+        let worldDepth = isSkyRealm ? Float(95) : Float(88)
+        let stepX = worldWidth / Float(columns)
+        let stepZ = worldDepth / Float(rows)
+        let startX = camera.x - worldWidth * 0.5
+        let startZ = camera.z + 1.8
+        let pointColumns = columns + 1
+        let pointRows = rows + 1
+        let pointCount = pointColumns * pointRows
+        var positions = Array(repeating: SIMD3<Float>(repeating: 0), count: pointCount)
+        var heights = Array(repeating: Float(0), count: pointCount)
+        var colors = Array(repeating: SIMD4<Float>(repeating: 1), count: pointCount)
+
+        for row in 0..<pointRows {
+            let z = startZ + Float(row) * stepZ
+            for column in 0..<pointColumns {
+                let x = startX + Float(column) * stepX
+                let index = row * pointColumns + column
+                let height = terrainHeight(
+                    x: x,
+                    z: z,
+                    time: time,
+                    frame: frame,
+                    intensity: intensity,
+                    isSkyRealm: isSkyRealm
+                )
+                heights[index] = height
+                positions[index] = SIMD3<Float>(x, height, z)
+            }
+        }
+
+        var normals = Array(repeating: SIMD3<Float>(0, 1, 0), count: pointCount)
+        for row in 0..<pointRows {
+            for column in 0..<pointColumns {
+                let index = row * pointColumns + column
+                let left = heights[row * pointColumns + max(0, column - 1)]
+                let right = heights[row * pointColumns + min(columns, column + 1)]
+                let back = heights[max(0, row - 1) * pointColumns + column]
+                let forward = heights[min(rows, row + 1) * pointColumns + column]
+                let normal = simd_normalize(SIMD3<Float>(
+                    -(right - left) / max(0.001, stepX * 2),
+                    1.45,
+                    -(forward - back) / max(0.001, stepZ * 2)
+                ))
+                normals[index] = normal
+                colors[index] = terrainColor(
+                    position: positions[index],
+                    normal: normal,
+                    frame: frame,
+                    palette: palette,
+                    time: time,
+                    isSkyRealm: isSkyRealm
+                )
+            }
+        }
+
+        vertices.reserveCapacity(columns * rows * 6)
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let i00 = row * pointColumns + column
+                let i10 = row * pointColumns + column + 1
+                let i01 = (row + 1) * pointColumns + column
+                let i11 = (row + 1) * pointColumns + column + 1
+                appendTerrainVertex(&vertices, position: positions[i00], normal: normals[i00], color: colors[i00])
+                appendTerrainVertex(&vertices, position: positions[i10], normal: normals[i10], color: colors[i10])
+                appendTerrainVertex(&vertices, position: positions[i01], normal: normals[i01], color: colors[i01])
+                appendTerrainVertex(&vertices, position: positions[i10], normal: normals[i10], color: colors[i10])
+                appendTerrainVertex(&vertices, position: positions[i11], normal: normals[i11], color: colors[i11])
+                appendTerrainVertex(&vertices, position: positions[i01], normal: normals[i01], color: colors[i01])
+            }
+        }
+
+        let fogBase = isSkyRealm
+            ? mix(SIMD3<Float>(0.05, 0.11, 0.16), palette.2 * 0.20, 0.45)
+            : mix(SIMD3<Float>(0.025, 0.040, 0.060), palette.0 * 0.18, 0.42)
+        let light = simd_normalize(SIMD3<Float>(
+            isSkyRealm ? -0.36 : -0.54,
+            isSkyRealm ? 0.78 : 0.84,
+            isSkyRealm ? -0.28 : -0.34
+        ))
+        return TerrainUniforms(
+            viewProjectionMatrix: viewProjection,
+            cameraPosition: SIMD4<Float>(camera.x, camera.y, camera.z, 1),
+            lightDirection: SIMD4<Float>(light.x, light.y, light.z, 0),
+            fogColor: SIMD4<Float>(fogBase.x, fogBase.y, fogBase.z, 1),
+            audio: SIMD4<Float>(frame.smoothedVolume, frame.smoothedBass, frame.trebleEnergy, frame.beatPulse),
+            fogStart: isSkyRealm ? 18 : 16,
+            fogEnd: isSkyRealm ? 92 : 78,
+            time: time,
+            palette: paletteIndex(settings.palette)
+        )
+    }
+
+    private func appendTerrainVertex(
+        _ vertices: inout [TerrainVertex],
+        position: SIMD3<Float>,
+        normal: SIMD3<Float>,
+        color: SIMD4<Float>
+    ) {
+        vertices.append(TerrainVertex(
+            position: SIMD4<Float>(position.x, position.y, position.z, 1),
+            normal: SIMD4<Float>(normal.x, normal.y, normal.z, 0),
+            color: color
+        ))
+    }
+
+    private func terrainHeight(
+        x: Float,
+        z: Float,
+        time: Float,
+        frame: VisualAudioFrame,
+        intensity: Float,
+        isSkyRealm: Bool
+    ) -> Float {
+        let drift = SIMD2<Float>(sin(time * 0.035), cos(time * 0.027)) * 2.4
+        let p = SIMD2<Float>(x, z)
+        let broad = fbm(p * 0.030 + drift)
+        let ridges = ridgedFbm(p * (isSkyRealm ? 0.080 : 0.068) + SIMD2<Float>(0, time * 0.030))
+        let detail = fbm(p * 0.175 + SIMD2<Float>(broad * 2.0, ridges * 1.3))
+        let valleyCenter = sin(z * 0.055 + time * 0.10) * (isSkyRealm ? 7.5 : 4.8)
+        let valley = exp(-abs(x - valleyCenter) * (isSkyRealm ? 0.10 : 0.17))
+        let terraces = sin((broad * 2.7 + ridges * 1.8 + z * 0.018) * 6.0) * 0.11
+        if isSkyRealm {
+            let islandLift = smoothstep(0.24, 0.92, ridges) * 5.2
+            let cloudPlateau = smoothstep(0.42, 0.76, broad) * 2.0
+            return 0.4 + islandLift + cloudPlateau + detail * 1.1 + terraces - valley * 0.7 + frame.smoothedBass * 0.18
+        }
+        let mountain = pow(max(0, ridges), 1.55) * 9.5 + broad * 3.1 + detail * 1.15
+        return (mountain - 4.4 - valley * 1.3) * (0.70 + intensity * 0.34) + terraces + frame.smoothedBass * 0.28
+    }
+
+    private func terrainColor(
+        position: SIMD3<Float>,
+        normal: SIMD3<Float>,
+        frame: VisualAudioFrame,
+        palette: (SIMD3<Float>, SIMD3<Float>, SIMD3<Float>),
+        time: Float,
+        isSkyRealm: Bool
+    ) -> SIMD4<Float> {
+        let slope = 1 - max(0, normal.y)
+        let ridgeDetail = ridgedFbm(SIMD2<Float>(position.x, position.z) * 0.22 + time * 0.015)
+        let valley = exp(-abs(position.x - sin(position.z * 0.055 + time * 0.10) * (isSkyRealm ? 7.5 : 4.8)) * (isSkyRealm ? 0.10 : 0.17))
+        let grass = isSkyRealm
+            ? mix(SIMD3<Float>(0.18, 0.42, 0.28), palette.1 * 0.72, 0.45)
+            : mix(SIMD3<Float>(0.12, 0.30, 0.20), palette.1 * 0.46, 0.38)
+        let rock = mix(SIMD3<Float>(0.22, 0.23, 0.25), palette.0 * 0.34, 0.32)
+        let snow = mix(SIMD3<Float>(0.72, 0.78, 0.78), palette.2 * 0.24 + SIMD3<Float>(0.45, 0.48, 0.52), 0.22)
+        let water = mix(SIMD3<Float>(0.04, 0.15, 0.22), palette.0 * 0.64, 0.40)
+        let mineral = mix(palette.2 * 0.70, SIMD3<Float>(0.70, 0.88, 0.94), 0.24)
+
+        let rockMix = smoothstep(0.16, 0.66, slope + ridgeDetail * 0.22)
+        let snowMix = smoothstep(isSkyRealm ? 5.7 : 4.8, isSkyRealm ? 9.8 : 8.5, position.y + ridgeDetail * 1.2)
+        let waterMix = valley * smoothstep(isSkyRealm ? 2.2 : 1.0, isSkyRealm ? -0.2 : -1.3, position.y)
+        let mineralMix = smoothstep(0.78, 1.0, ridgeDetail) * (0.10 + frame.trebleEnergy * 0.22)
+        var color = mix(grass, rock, rockMix)
+        color = mix(color, snow, snowMix * 0.62)
+        color = mix(color, water, min(0.72, waterMix))
+        color = mix(color, mineral, mineralMix)
+        color += palette.1 * frame.smoothedBass * 0.035
+        color += palette.2 * frame.trebleEnergy * smoothstep(0.52, 0.92, ridgeDetail) * 0.045
+        return SIMD4<Float>(min(1, color.x), min(1, color.y), min(1, color.z), 1)
+    }
+
     private func appendCinematicBackdrop(
         into vertices: inout [SpectraVertex],
         frame: VisualAudioFrame,
@@ -794,6 +1167,17 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         return vertexBuffer
     }
 
+    private func ensureTerrainVertexBuffer(device: MTLDevice, vertexCount: Int) -> MTLBuffer? {
+        if vertexCount > terrainVertexCapacity {
+            terrainVertexCapacity = max(vertexCount, terrainVertexCapacity * 2, 16_384)
+            terrainVertexBuffer = device.makeBuffer(
+                length: MemoryLayout<TerrainVertex>.stride * terrainVertexCapacity,
+                options: [.storageModeShared]
+            )
+        }
+        return terrainVertexBuffer
+    }
+
     private func updateFPS() {
         fpsFrameCount += 1
         let now = CACurrentMediaTime()
@@ -881,6 +1265,81 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         vertices.append(SpectraVertex(position: SIMD2<Float>(x1 + nx, y1 + ny), color: colorB))
     }
 
+    private func perspectiveMatrix(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
+        let y = 1 / tan(fovY * 0.5)
+        let x = y / aspect
+        let z = far / (near - far)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(x, 0, 0, 0),
+            SIMD4<Float>(0, y, 0, 0),
+            SIMD4<Float>(0, 0, z, -1),
+            SIMD4<Float>(0, 0, z * near, 0)
+        ))
+    }
+
+    private func lookAtMatrix(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
+        let z = simd_normalize(eye - center)
+        let x = simd_normalize(simd_cross(up, z))
+        let y = simd_cross(z, x)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(x.x, y.x, z.x, 0),
+            SIMD4<Float>(x.y, y.y, z.y, 0),
+            SIMD4<Float>(x.z, y.z, z.z, 0),
+            SIMD4<Float>(-simd_dot(x, eye), -simd_dot(y, eye), -simd_dot(z, eye), 1)
+        ))
+    }
+
+    private func valueNoise(_ point: SIMD2<Float>) -> Float {
+        let cell = SIMD2<Float>(floor(point.x), floor(point.y))
+        var local = point - cell
+        local = local * local * (SIMD2<Float>(repeating: 3) - local * 2)
+        let a = hash(cell)
+        let b = hash(cell + SIMD2<Float>(1, 0))
+        let c = hash(cell + SIMD2<Float>(0, 1))
+        let d = hash(cell + SIMD2<Float>(1, 1))
+        return mix(mix(a, b, local.x), mix(c, d, local.x), local.y)
+    }
+
+    private func fbm(_ point: SIMD2<Float>) -> Float {
+        var p = point
+        var amplitude: Float = 0.52
+        var value: Float = 0
+        for _ in 0..<5 {
+            value += valueNoise(p) * amplitude
+            p = rotatePoint(p * 2.03 + SIMD2<Float>(17.31, 9.17), 0.47)
+            amplitude *= 0.52
+        }
+        return value
+    }
+
+    private func ridgedFbm(_ point: SIMD2<Float>) -> Float {
+        var p = point
+        var amplitude: Float = 0.58
+        var value: Float = 0
+        for _ in 0..<5 {
+            let ridge = 1 - abs(valueNoise(p) * 2 - 1)
+            value += ridge * ridge * amplitude
+            p = rotatePoint(p * 2.11 + SIMD2<Float>(5.13, 13.71), -0.38)
+            amplitude *= 0.50
+        }
+        return min(1, value)
+    }
+
+    private func hash(_ point: SIMD2<Float>) -> Float {
+        fract(sin(point.x * 127.1 + point.y * 311.7) * 43_758.5453)
+    }
+
+    private func smoothstep(_ edge0: Float, _ edge1: Float, _ value: Float) -> Float {
+        let range = edge1 - edge0
+        guard abs(range) > 0.0001 else { return value < edge0 ? 0 : 1 }
+        let t = min(1, max(0, (value - edge0) / range))
+        return t * t * (3 - 2 * t)
+    }
+
+    private func mix(_ a: Float, _ b: Float, _ t: Float) -> Float {
+        a + (b - a) * min(1, max(0, t))
+    }
+
     private func mix(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ t: Float) -> SIMD3<Float> {
         a + (b - a) * min(1, max(0, t))
     }
@@ -930,6 +1389,31 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         uint palette;
     };
 
+    struct TerrainVertex {
+        float4 position;
+        float4 normal;
+        float4 color;
+    };
+
+    struct TerrainUniforms {
+        float4x4 viewProjectionMatrix;
+        float4 cameraPosition;
+        float4 lightDirection;
+        float4 fogColor;
+        float4 audio;
+        float fogStart;
+        float fogEnd;
+        float time;
+        uint palette;
+    };
+
+    struct TerrainOut {
+        float4 position [[position]];
+        float3 worldPosition;
+        float3 normal;
+        float4 color;
+    };
+
     vertex VertexOut spectra_vertex(uint vertexID [[vertex_id]],
                                     constant SpectraVertex *vertices [[buffer(0)]]) {
         VertexOut out;
@@ -977,6 +1461,39 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         float3 low = float3(0.10, 0.13, 0.14);
         float3 high = float3(0.90, 0.94, 0.90);
         return lerp3(low, high, smoothstep(0.08, 0.92, t));
+    }
+
+    vertex TerrainOut terrain_vertex(uint vertexID [[vertex_id]],
+                                     constant TerrainVertex *vertices [[buffer(0)]],
+                                     constant TerrainUniforms &uniforms [[buffer(1)]]) {
+        TerrainVertex inputVertex = vertices[vertexID];
+        TerrainOut out;
+        float4 world = float4(inputVertex.position.xyz, 1.0);
+        out.position = uniforms.viewProjectionMatrix * world;
+        out.worldPosition = inputVertex.position.xyz;
+        out.normal = normalize(inputVertex.normal.xyz);
+        out.color = inputVertex.color;
+        return out;
+    }
+
+    fragment half4 terrain_fragment(TerrainOut input [[stage_in]],
+                                    constant TerrainUniforms &uniforms [[buffer(0)]]) {
+        float3 normal = normalize(input.normal);
+        float3 lightDirection = normalize(uniforms.lightDirection.xyz);
+        float3 viewDirection = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+        float diffuse = clamp(dot(normal, lightDirection), 0.0, 1.0);
+        float halfLambert = diffuse * 0.5 + 0.5;
+        float rim = pow(clamp(1.0 - dot(normal, viewDirection), 0.0, 1.0), 2.0);
+        float distanceFromCamera = distance(uniforms.cameraPosition.xyz, input.worldPosition);
+        float fog = smoothstep(uniforms.fogStart, uniforms.fogEnd, distanceFromCamera);
+        float3 paletteLight = paletteGradient(uniforms.palette, 0.68 + uniforms.time * 0.018 + uniforms.audio.z * 0.08);
+        float audioGlow = uniforms.audio.x * 0.055 + uniforms.audio.y * 0.070 + uniforms.audio.w * 0.045;
+        float3 color = input.color.rgb * (0.24 + halfLambert * 0.86);
+        color += paletteLight * (rim * (0.08 + uniforms.audio.z * 0.08) + audioGlow);
+        color += paletteGradient(uniforms.palette, 0.36) * pow(diffuse, 6.0) * (0.05 + uniforms.audio.y * 0.06);
+        color = lerp3(color, uniforms.fogColor.rgb, fog * 0.86);
+        color = pow(max(color, float3(0.0)), float3(0.92));
+        return half4(float4(clamp(color, 0.0, 1.0), 1.0));
     }
 
     float hash21(float2 p) {
@@ -1310,15 +1827,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             return mandelboxFlight(point, u);
         }
         if (u.mode == 6) {
-            return terrainFlight(point, u);
-        }
-        if (u.mode == 7) {
             return nebulaVoyage(point, u);
         }
-        if (u.mode == 8) {
-            return skyRealmFlight(point, u);
-        }
-        if (u.mode == 9) {
+        if (u.mode == 7) {
             return crystalCavern(point, u);
         }
 

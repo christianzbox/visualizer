@@ -53,9 +53,13 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-xattr -cr "$APP_BUNDLE"
-xattr -d com.apple.FinderInfo "$APP_BUNDLE" 2>/dev/null || true
-xattr -d "com.apple.fileprovider.fpfs#P" "$APP_BUNDLE" 2>/dev/null || true
+clean_bundle_xattrs() {
+    xattr -cr "$APP_BUNDLE"
+    xattr -d com.apple.FinderInfo "$APP_BUNDLE" 2>/dev/null || true
+    xattr -d "com.apple.fileprovider.fpfs#P" "$APP_BUNDLE" 2>/dev/null || true
+}
+
+clean_bundle_xattrs
 
 SIGN_IDENTITY="${SPECTRA_CODE_SIGN_IDENTITY:-}"
 if [[ -z "$SIGN_IDENTITY" ]]; then
@@ -64,6 +68,8 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
             | awk -F '"' '/"Apple Development:|Developer ID Application:|Mac Developer:/{ print $2; exit }'
     )"
 fi
+
+clean_bundle_xattrs
 
 if [[ -n "$SIGN_IDENTITY" ]]; then
     codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE" >/dev/null

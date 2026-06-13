@@ -56,17 +56,24 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         switch self {
         case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight:
             return fractalMode
-        case .terrainFlight: return 6
-        case .nebulaVoyage: return 7
-        case .skyRealmFlight: return 8
-        case .crystalCavern: return 9
-        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform:
+        case .nebulaVoyage: return 6
+        case .crystalCavern: return 7
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .terrainFlight, .skyRealmFlight:
             return nil
         }
     }
 
     public var usesFullscreenShader: Bool {
         fullscreenShaderMode != nil
+    }
+
+    public var usesMeshWorld: Bool {
+        switch self {
+        case .terrainFlight, .skyRealmFlight:
+            return true
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform, .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField, .mandelboxFlight, .nebulaVoyage, .crystalCavern:
+            return false
+        }
     }
 }
 

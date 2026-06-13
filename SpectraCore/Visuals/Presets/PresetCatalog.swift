@@ -81,7 +81,7 @@ public enum PresetCatalog {
         VisualPresetDescriptor(
             id: .terrainFlight,
             name: VisualPresetID.terrainFlight.name,
-            description: "Procedural cinematic landscape flight with audio-reactive horizon, fog, and terrain light.",
+            description: "Depth-rendered 3D landscape flight with mesh mountains, cinematic fog, and subtle audio lighting.",
             category: .journey,
             defaultSettings: PresetSettings(intensity: 0.82, sensitivity: 0.72, palette: .aurora, motionAmount: 0.80, glowAmount: 0.66, beatReactivity: 0.78)
         ),
@@ -95,7 +95,7 @@ public enum PresetCatalog {
         VisualPresetDescriptor(
             id: .skyRealmFlight,
             name: VisualPresetID.skyRealmFlight.name,
-            description: "High-fantasy sky traversal through floating islands, atmospheric haze, and distant citadel silhouettes.",
+            description: "Depth-rendered high-fantasy flight over elevated realms, luminous ridges, and atmospheric haze.",
             category: .journey,
             defaultSettings: PresetSettings(intensity: 0.80, sensitivity: 0.66, palette: .aurora, smoothing: 0.78, motionAmount: 0.70, glowAmount: 0.72, beatReactivity: 0.62)
         ),

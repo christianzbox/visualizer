@@ -163,6 +163,8 @@ struct SpectraDiagnostics {
         try expect(library.makeFunction(name: "spectra_vertex") != nil, "Metal shader should expose spectra_vertex")
         try expect(library.makeFunction(name: "spectra_fragment") != nil, "Metal shader should expose spectra_fragment")
         try expect(library.makeFunction(name: "spectra_fractal_fragment") != nil, "Metal shader should expose spectra_fractal_fragment")
+        try expect(library.makeFunction(name: "terrain_vertex") != nil, "Metal shader should expose terrain_vertex")
+        try expect(library.makeFunction(name: "terrain_fragment") != nil, "Metal shader should expose terrain_fragment")
     }
 
     private static func testSettingsPersistence() throws {
@@ -197,8 +199,10 @@ struct SpectraDiagnostics {
         try expect(Set(fractalModes) == Set(0...5), "Fractal presets should map to distinct shader formulas")
         let shaderPresets = PresetCatalog.presets.filter { $0.id.usesFullscreenShader }
         let shaderModes = shaderPresets.compactMap { $0.id.fullscreenShaderMode }
-        try expect(shaderPresets.count == 10, "Preset catalog should expose ten full-screen shader choices")
-        try expect(Set(shaderModes) == Set(0...9), "Full-screen shader presets should map to distinct shader modes")
+        try expect(shaderPresets.count == 8, "Preset catalog should expose eight full-screen shader choices")
+        try expect(Set(shaderModes) == Set(0...7), "Full-screen shader presets should map to distinct shader modes")
+        let meshPresets = PresetCatalog.presets.filter { $0.id.usesMeshWorld }
+        try expect(Set(meshPresets.map(\.id)) == [.terrainFlight, .skyRealmFlight], "Mesh world presets should be explicit")
     }
 
     private static func testCaptureErrors() throws {
