@@ -29,6 +29,13 @@ swift build -c release
 swift run Spectra
 ```
 
+For local macOS permission testing, prefer the debug `.app` wrapper so System Settings sees a stable Spectra app identity:
+
+```bash
+Scripts/build-debug-app.sh
+open .build/Spectra.app
+```
+
 Open in Xcode:
 
 ```bash
@@ -46,7 +53,7 @@ This machine's active Command Line Tools do not include `XCTest`, so the XCTest 
 
 ## Permissions
 
-System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission. Spectra preflights permission before enumerating system sources, shows a clear recovery message, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
+System audio capture uses ScreenCaptureKit. On modern macOS this is controlled by Screen & System Audio Recording permission, not Accessibility. Spectra preflights permission before enumerating system sources, shows a clear recovery message, opens the correct privacy pane from the app, and falls back to Test Signal Mode when permission is denied, unsupported, or unavailable.
 
 Privacy text shown by the app:
 
@@ -66,7 +73,8 @@ Privacy text shown by the app:
 
 ## Troubleshooting
 
-- If System Mix does not start, use the in-app permission prompt or open System Settings and grant Screen & System Audio Recording to Spectra.
+- If System Mix does not start, use the in-app recording privacy button or open System Settings and grant Screen & System Audio Recording to Spectra.
+- If Spectra does not appear in Privacy & Security, launch it through `open .build/Spectra.app`; raw `swift run Spectra` launches as a command-line executable and can have an unstable macOS privacy identity.
 - If permission was just changed, quit and relaunch Spectra or refresh sources.
 - If no real audio is captured, switch to Test Signal Mode to verify the renderer and analysis pipeline.
 - If an app source disappears, refresh sources and select System Mix.

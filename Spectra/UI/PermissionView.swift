@@ -11,7 +11,7 @@ struct PermissionView: View {
             Text("Spectra needs audio-capture permission to visualize system audio. Audio stays local and is not recorded or uploaded.")
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Button("Open Permission Prompt", action: requestAction)
+            Button("Open Recording Privacy Settings", action: requestAction)
         }
         .padding(28)
     }

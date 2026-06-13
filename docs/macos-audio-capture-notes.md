@@ -10,9 +10,11 @@ Spectra uses ScreenCaptureKit because it is the modern public API that can provi
 
 ## Permission
 
-ScreenCaptureKit capture is controlled by macOS privacy permissions. Users may see this as Screen Recording or Screen & System Audio Recording depending on OS version.
+ScreenCaptureKit capture is controlled by macOS privacy permissions. Users may see this as Screen Recording or Screen & System Audio Recording depending on OS version. This is not the Accessibility permission.
 
 Spectra preflights `CGPreflightScreenCaptureAccess()` before enumerating system sources. If access is missing, it shows a permission message and keeps Test Signal Mode available.
+
+For local SwiftPM development, use `Scripts/build-debug-app.sh` and launch `.build/Spectra.app` when validating permissions. Raw `swift run Spectra` is useful for quick renderer checks, but macOS may treat it as a command-line executable instead of a stable app identity in Privacy & Security.
 
 ## Fallback
 

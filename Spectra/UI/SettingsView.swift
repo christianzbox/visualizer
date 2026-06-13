@@ -27,7 +27,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Button("Request System Audio Permission") {
+                Button("Open Recording Privacy Settings") {
                     appState.requestSystemCapturePermission()
                 }
             }

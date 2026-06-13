@@ -143,7 +143,7 @@ struct MainWindowView: View {
                 Button {
                     appState.requestSystemCapturePermission()
                 } label: {
-                    Label("Open Permission Prompt", systemImage: "lock.open")
+                    Label("Open Recording Privacy Settings", systemImage: "lock.open")
                 }
 
                 Button {
