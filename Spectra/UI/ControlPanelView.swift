@@ -10,11 +10,23 @@ struct ControlPanelView: View {
             compactControls
         }
         .padding(14)
-        .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
+        .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.10), lineWidth: 1)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
         }
+    }
+
+    private var controlBackground: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                .black.opacity(0.62),
+                .black.opacity(0.48),
+                .white.opacity(0.06)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private var regularControls: some View {

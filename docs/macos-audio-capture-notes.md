@@ -14,7 +14,7 @@ ScreenCaptureKit capture is controlled by macOS privacy permissions. Users may s
 
 Spectra preflights `CGPreflightScreenCaptureAccess()` before enumerating system sources. If access is missing, it shows a permission message and keeps Test Signal Mode available.
 
-For local SwiftPM development, use `Scripts/build-debug-app.sh` and launch `.build/Spectra.app` when validating permissions. Raw `swift run Spectra` is useful for quick renderer checks, but macOS may treat it as a command-line executable instead of a stable app identity in Privacy & Security.
+For local SwiftPM development, use `Scripts/build-debug-app.sh` and launch `.build/Spectra.app` when validating permissions. The script preserves the app bundle path and signs the debug bundle so macOS can associate privacy grants with `com.christianzbox.spectra.debug`. Raw `swift run Spectra` is useful for quick renderer checks, but macOS may treat it as a command-line executable instead of a stable app identity in Privacy & Security.
 
 ## Fallback
 

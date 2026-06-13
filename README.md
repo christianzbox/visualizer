@@ -20,7 +20,7 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 - macOS 13 or newer for ScreenCaptureKit system audio capture.
 - Apple Silicon recommended.
 - Xcode can open `Package.swift`. This repository currently builds with Swift Package Manager.
-- The active Command Line Tools are enough for `swift build`, `swift test`, and `swift run SpectraDiagnostics`; a full Xcode install is needed for `xcodebuild` workflows.
+- The active Command Line Tools are enough for `swift build` and `swift run SpectraDiagnostics`. Use full Xcode for XCTest execution.
 
 ## Build And Run
 
@@ -37,6 +37,8 @@ Scripts/build-debug-app.sh
 open .build/Spectra.app
 ```
 
+The script preserves the `.app` bundle path and signs the debug app bundle ad hoc after each build. If macOS privacy still drops the grant after major local changes, re-open `.build/Spectra.app`, grant Screen & System Audio Recording again, then quit and relaunch the app.
+
 Open in Xcode:
 
 ```bash
@@ -46,11 +48,11 @@ open Package.swift
 Run package tests and diagnostics:
 
 ```bash
-swift test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 swift run SpectraDiagnostics
 ```
 
-This machine's active Command Line Tools do not include `XCTest`, so the XCTest files are gated with `#if canImport(XCTest)`. `swift test` verifies the test target compiles under CLT; `SpectraDiagnostics` executes the core FFT, band mapping, silence, beat, smoothing, test signal, and settings persistence checks. In full Xcode, the XCTest files are available normally.
+This machine's active Command Line Tools can build the XCTest bundle but do not include the `xctest` runner. `SpectraDiagnostics` executes the core FFT, band mapping, silence, beat, smoothing, test signal, and settings persistence checks in CLT-only environments. Full Xcode runs the XCTest suite normally.
 
 ## Permissions
 
@@ -90,6 +92,7 @@ The CI job runs:
 - `swift package resolve`
 - `swift build`
 - `swift build -c release`
+- `swift test list` with a minimum discovered-test guard
 - `swift test`
 - `swift run SpectraDiagnostics`
 - `swift package describe`

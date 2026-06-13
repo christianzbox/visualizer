@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var availableSources: [AudioSource] = []
     @Published var currentSource: AudioSource?
+    @Published var recordingPermissionStatus: PermissionStatus = Permissions.screenCaptureStatus
     @Published var settings: UserSettings {
         didSet {
             testSignalEngine.signalType = settings.testSignalType
@@ -82,6 +83,7 @@ final class AppState: ObservableObject {
 
     func bootstrap() async {
         ensureForegroundPresentation()
+        refreshPermissionStatus()
         updateWindowLevel()
         if settings.launchFullScreen {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
@@ -103,6 +105,7 @@ final class AppState: ObservableObject {
     }
 
     func refreshSources() async {
+        refreshPermissionStatus()
         var sources: [AudioSource] = []
         if let testSource = try? await testSignalEngine.listSources().first {
             sources.append(testSource)
@@ -172,6 +175,9 @@ final class AppState: ObservableObject {
 
     func requestSystemCapturePermission() {
         Permissions.requestScreenCaptureAccess()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.refreshPermissionStatus()
+        }
     }
 
     func toggleFullScreen() {
@@ -185,6 +191,10 @@ final class AppState: ObservableObject {
 
     func updateFramesPerSecond(_ fps: Double) {
         framesPerSecond = fps
+    }
+
+    func refreshPermissionStatus() {
+        recordingPermissionStatus = Permissions.screenCaptureStatus
     }
 
     private func sourceForCurrentSettings(from sources: [AudioSource]) -> AudioSource? {

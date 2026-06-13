@@ -4,13 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Spectra"
 APP_BUNDLE="$ROOT_DIR/.build/$APP_NAME.app"
-EXECUTABLE_SOURCE="$ROOT_DIR/.build/arm64-apple-macosx/debug/$APP_NAME"
 
 cd "$ROOT_DIR"
 swift build --product "$APP_NAME"
+BUILD_PRODUCTS_DIR="$(swift build --show-bin-path)"
+EXECUTABLE_SOURCE="$BUILD_PRODUCTS_DIR/$APP_NAME"
 
-rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+rm -f "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "$EXECUTABLE_SOURCE" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
@@ -51,5 +52,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+xattr -cr "$APP_BUNDLE"
+codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
 
 echo "$APP_BUNDLE"

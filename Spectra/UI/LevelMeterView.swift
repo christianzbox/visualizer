@@ -6,9 +6,15 @@ struct LevelMeterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Level")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.62))
+            HStack {
+                Text("Level")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.62))
+                Spacer()
+                Text(frame.isSilent ? "quiet" : "live")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(frame.isSilent ? .white.opacity(0.40) : .green.opacity(0.80))
+            }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -20,6 +26,13 @@ struct LevelMeterView: View {
                 }
             }
             .frame(height: 10)
+
+            HStack(spacing: 4) {
+                miniBand(frame.smoothedBass, color: .cyan)
+                miniBand(frame.midEnergy, color: .mint)
+                miniBand(frame.trebleEnergy, color: .pink)
+            }
+            .frame(height: 4)
 
             HStack {
                 Text("RMS \(frame.rms, specifier: "%.3f")")
@@ -37,5 +50,17 @@ struct LevelMeterView: View {
             startPoint: .leading,
             endPoint: .trailing
         )
+    }
+
+    private func miniBand(_ value: Float, color: Color) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.08))
+                Capsule()
+                    .fill(color.opacity(0.70))
+                    .frame(width: proxy.size.width * CGFloat(min(1, max(0, value))))
+            }
+        }
     }
 }

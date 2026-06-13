@@ -44,6 +44,6 @@ All visual presets use the same `VisualAudioFrame` features rather than independ
 
 ## Test Strategy
 
-XCTest files live under `Tests/SpectraTests` and run in a full Xcode environment. The active Command Line Tools install on this machine lacks `XCTest`, so `swift test` is gated to compile cleanly and `SpectraDiagnostics` executes the local checks from a plain Swift executable.
+XCTest files live under `Tests/SpectraTests` and run in a full Xcode environment. The active Command Line Tools install on this machine can build the XCTest bundle but does not include the `xctest` runner, so `SpectraDiagnostics` executes the command-line-safe checks from a plain Swift executable.
 
-GitHub Actions runs both paths on `macos-latest`: package tests for Xcode-backed XCTest coverage and `SpectraDiagnostics` for command-line-safe regression checks.
+GitHub Actions pins `DEVELOPER_DIR` to full Xcode, verifies XCTest discovery before running tests, then runs `SpectraDiagnostics` for command-line-safe regression checks.
