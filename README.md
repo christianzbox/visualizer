@@ -6,7 +6,7 @@ Spectra is a macOS system-audio visualizer. It analyzes live audio locally and r
 
 - SwiftUI macOS shell.
 - Metal-backed visualizer view.
-- Five working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform.
+- Ten working presets: Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, plus five true iterative fractal presets.
 - Test Signal Mode with sine, bass pulse, noise, and fake beat pattern.
 - Accelerate/vDSP FFT analysis with adaptive band normalization, onset/beat detection, smoothing, silence detection, and level metering.
 - ScreenCaptureKit system mix and experimental app-source capture backend.
@@ -58,9 +58,10 @@ Privacy text shown by the app:
 3. Switch Capture Mode to System Mix to capture Mac output.
 4. Grant Screen & System Audio Recording permission if macOS prompts, then refresh sources.
 5. Play audio in any app.
-6. Switch between Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, and Minimal Waveform.
-7. Use the full-screen button or standard macOS full-screen controls.
-8. Adjust sensitivity and intensity, or pin the window as floating.
+6. Switch between Spectrum Bars, Liquid Waveform, Particle Galaxy, Neon Tunnel, Minimal Waveform, and the fractal family.
+7. Fractal choices are real formulas: Mandelbrot, Julia, Burning Ship, Tricorn, and Phoenix.
+8. Use the full-screen button or standard macOS full-screen controls.
+9. Adjust sensitivity, intensity, palette, motion, glow, and beat response, or pin the window as floating.
 
 ## Troubleshooting
 
@@ -106,12 +107,14 @@ To make CI required in GitHub:
 6. Play YouTube in a browser.
 7. Verify visualizer reacts.
 8. Switch presets.
-9. Go full-screen.
-10. Toggle floating window mode.
-11. Stop audio and verify visuals settle after the silence hold.
-12. Deny permission and verify friendly error/fallback behavior.
-13. Quit and relaunch; settings persist.
-14. Run `swift run SpectraDiagnostics`.
+9. Try each fractal preset and verify different structure, not only color changes.
+10. Resize the window narrower and verify controls collapse instead of clipping.
+11. Go full-screen.
+12. Toggle floating window mode.
+13. Stop audio and verify visuals settle after the silence hold.
+14. Deny permission and verify friendly error/fallback behavior.
+15. Quit and relaunch; settings persist.
+16. Run `swift run SpectraDiagnostics`.
 
 ## Known Limitations
 
@@ -120,7 +123,7 @@ To make CI required in GitHub:
 - ScreenCaptureKit app-source capture is experimental and depends on macOS permission behavior.
 - `Config/Spectra-Info.plist` contains distribution privacy strings, but a signed `.app` bundle/Xcode project should promote these into bundle settings before distribution.
 - Apple Music metadata uses Apple Events when explicitly queried by future UI and is not required for visualization.
-- The SwiftPM renderer compiles its small Metal shader at runtime for package reliability; a production Xcode target should compile `Shaders.metal`.
+- The SwiftPM renderer compiles its Metal shader at runtime for package reliability; a production Xcode target should compile `Shaders.metal`.
 
 ## Roadmap
 

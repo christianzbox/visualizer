@@ -17,8 +17,8 @@ Spectra is split into a reusable core target and a macOS executable target.
 
 - `AppState`: owns settings, capture engine selection, analysis queue, UI frame throttling, and renderer handoff.
 - `VisualFrameStore`: lock-protected latest-frame handoff from analysis to Metal.
-- SwiftUI views: visual area, source/status, preset picker, controls, settings, debug overlay.
-- `MetalRenderer`: builds geometry for each preset from the latest `VisualAudioFrame` using a reusable vertex array and grow-only Metal buffer.
+- SwiftUI views: visual area, source/status, grouped preset picker, responsive controls, settings, debug overlay.
+- `MetalRenderer`: builds geometry presets from the latest `VisualAudioFrame` using a reusable vertex array and grow-only Metal buffer. Fractal presets use a separate full-screen Metal fragment pipeline with shared audio uniforms.
 
 ## Threading
 
@@ -31,6 +31,11 @@ The capture callback only hands buffers to an analysis queue. Analysis produces 
 - Particle Galaxy: deterministic particle field with beat expansion and treble shimmer.
 - Neon Tunnel: radial line tunnel with audio-reactive depth.
 - Minimal Waveform: restrained low-density waveform for voice and background use.
+- Mandelbrot Bloom: classic escape-time Mandelbrot formula with bass zoom, mid rotation, and treble color bands.
+- Julia Vortex: Julia recurrence with an audio-driven complex seed.
+- Burning Ship: rectified complex recurrence with low-frequency expansion.
+- Tricorn Pulse: conjugate quadratic recurrence driven by mids and beat pressure.
+- Phoenix Field: feedback recurrence with treble detail and bass expansion.
 
 ## Test Strategy
 

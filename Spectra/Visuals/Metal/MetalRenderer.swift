@@ -3,6 +3,24 @@ import MetalKit
 import SpectraCore
 import simd
 
+private struct FractalUniforms {
+    var resolution: SIMD2<Float>
+    var time: Float
+    var rms: Float
+    var volume: Float
+    var bass: Float
+    var mid: Float
+    var treble: Float
+    var beat: Float
+    var intensity: Float
+    var sensitivity: Float
+    var motion: Float
+    var glow: Float
+    var beatReactivity: Float
+    var mode: UInt32
+    var palette: UInt32
+}
+
 final class MetalRenderer: NSObject, MTKViewDelegate {
     private let frameStore: VisualFrameStore
     private var presetProvider: () -> VisualPresetID
@@ -11,7 +29,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     private var device: MTLDevice?
     private var commandQueue: MTLCommandQueue?
-    private var pipelineState: MTLRenderPipelineState?
+    private var geometryPipelineState: MTLRenderPipelineState?
+    private var fractalPipelineState: MTLRenderPipelineState?
     private var startTime = CACurrentMediaTime()
     private var lastFrameTime = CACurrentMediaTime()
     private var fpsSampleStart = CACurrentMediaTime()
@@ -44,7 +63,10 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         view.enableSetNeedsDisplay = false
         self.device = device
         self.commandQueue = device?.makeCommandQueue()
-        self.pipelineState = makePipeline(for: view)
+        if let library = makeShaderLibrary(for: view) {
+            self.geometryPipelineState = makePipeline(for: view, library: library, fragmentFunctionName: "spectra_fragment")
+            self.fractalPipelineState = makePipeline(for: view, library: library, fragmentFunctionName: "spectra_fractal_fragment")
+        }
     }
 
     func update(
@@ -60,7 +82,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         guard let device,
               let commandQueue,
-              let pipelineState,
               let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable else {
             return
@@ -70,8 +91,17 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let settings = settingsProvider()
         let preset = presetProvider()
         let time = Float(CACurrentMediaTime() - startTime)
+        let isFractal = preset.isFractal
         reusableVertices.removeAll(keepingCapacity: true)
-        appendVertices(into: &reusableVertices, for: preset, frame: frame, settings: settings, time: time)
+        appendVertices(
+            into: &reusableVertices,
+            for: preset,
+            frame: frame,
+            settings: settings,
+            time: time,
+            drawableSize: view.drawableSize
+        )
+        guard let pipelineState = isFractal ? fractalPipelineState : geometryPipelineState else { return }
 
         let clear = backgroundColor(for: settings.palette, frame: frame)
         descriptor.colorAttachments[0].clearColor = MTLClearColor(
@@ -87,6 +117,16 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
 
         encoder.setRenderPipelineState(pipelineState)
+        if isFractal {
+            var uniforms = makeFractalUniforms(
+                preset: preset,
+                frame: frame,
+                settings: settings,
+                time: time,
+                drawableSize: view.drawableSize
+            )
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<FractalUniforms>.stride, index: 0)
+        }
         if !reusableVertices.isEmpty,
            let buffer = ensureVertexBuffer(device: device, vertexCount: reusableVertices.count) {
             let byteCount = MemoryLayout<SpectraVertex>.stride * reusableVertices.count
@@ -107,18 +147,25 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         lastFrameTime = CACurrentMediaTime()
     }
 
-    private func makePipeline(for view: MTKView) -> MTLRenderPipelineState? {
+    private func makeShaderLibrary(for view: MTKView) -> MTLLibrary? {
         guard let device = view.device else { return nil }
-        let library: MTLLibrary
         do {
-            library = try device.makeLibrary(source: Self.shaderSource, options: nil)
+            return try device.makeLibrary(source: Self.shaderSource, options: nil)
         } catch {
             assertionFailure("Spectra Metal shader compilation failed: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func makePipeline(
+        for view: MTKView,
+        library: MTLLibrary,
+        fragmentFunctionName: String
+    ) -> MTLRenderPipelineState? {
+        guard let device = view.device else { return nil }
         guard let vertexFunction = library.makeFunction(name: "spectra_vertex"),
-              let fragmentFunction = library.makeFunction(name: "spectra_fragment") else {
-            assertionFailure("Spectra Metal shader library is missing required functions.")
+              let fragmentFunction = library.makeFunction(name: fragmentFunctionName) else {
+            assertionFailure("Spectra Metal shader library is missing \(fragmentFunctionName).")
             return nil
         }
 
@@ -144,7 +191,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         for preset: VisualPresetID,
         frame: VisualAudioFrame,
         settings: PresetSettings,
-        time: Float
+        time: Float,
+        drawableSize: CGSize
     ) {
         switch preset {
         case .spectrumBars:
@@ -157,6 +205,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             neonTunnel(into: &vertices, frame: frame, settings: settings, time: time)
         case .minimalWaveform:
             minimalWaveform(into: &vertices, frame: frame, settings: settings, time: time)
+        case .mandelbrotBloom, .juliaVortex, .burningShip, .tricornPulse, .phoenixField:
+            fractalSurface(into: &vertices, drawableSize: drawableSize)
         }
     }
 
@@ -374,6 +424,50 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         }
     }
 
+    private func fractalSurface(into vertices: inout [SpectraVertex], drawableSize: CGSize) {
+        vertices.reserveCapacity(6)
+        appendQuad(
+            &vertices,
+            x0: -1,
+            y0: -1,
+            x1: 1,
+            y1: 1,
+            bottom: SIMD4<Float>(1, 1, 1, 1),
+            top: SIMD4<Float>(1, 1, 1, 1)
+        )
+    }
+
+    private func makeFractalUniforms(
+        preset: VisualPresetID,
+        frame: VisualAudioFrame,
+        settings: PresetSettings,
+        time: Float,
+        drawableSize: CGSize
+    ) -> FractalUniforms {
+        let mode = UInt32(max(0, preset.fractalMode ?? 0))
+        let motion = settings.reduceMotion ? Float(0.08) : Float(settings.motionAmount)
+        return FractalUniforms(
+            resolution: SIMD2<Float>(
+                max(1, Float(drawableSize.width)),
+                max(1, Float(drawableSize.height))
+            ),
+            time: time,
+            rms: frame.rms,
+            volume: frame.smoothedVolume,
+            bass: frame.smoothedBass,
+            mid: frame.midEnergy,
+            treble: frame.trebleEnergy,
+            beat: frame.beatPulse,
+            intensity: Float(settings.intensity),
+            sensitivity: Float(settings.sensitivity),
+            motion: motion,
+            glow: Float(settings.glowAmount),
+            beatReactivity: Float(settings.beatReactivity),
+            mode: mode,
+            palette: paletteIndex(settings.palette)
+        )
+    }
+
     private func ensureVertexBuffer(device: MTLDevice, vertexCount: Int) -> MTLBuffer? {
         if vertexCount > vertexCapacity {
             vertexCapacity = max(vertexCount, vertexCapacity * 2, 1_024)
@@ -419,6 +513,15 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             return (SIMD3<Float>(0.12, 0.42, 1.00), SIMD3<Float>(0.85, 0.22, 0.96), SIMD3<Float>(0.20, 1.00, 0.70))
         case .graphite:
             return (SIMD3<Float>(0.70, 0.78, 0.82), SIMD3<Float>(0.34, 0.54, 0.65), SIMD3<Float>(0.95, 0.96, 0.90))
+        }
+    }
+
+    private func paletteIndex(_ palette: ColorPalette) -> UInt32 {
+        switch palette {
+        case .aurora: return 0
+        case .magma: return 1
+        case .prism: return 2
+        case .graphite: return 3
         }
     }
 
@@ -485,6 +588,24 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         float4 color;
     };
 
+    struct FractalUniforms {
+        float2 resolution;
+        float time;
+        float rms;
+        float volume;
+        float bass;
+        float mid;
+        float treble;
+        float beat;
+        float intensity;
+        float sensitivity;
+        float motion;
+        float glow;
+        float beatReactivity;
+        uint mode;
+        uint palette;
+    };
+
     vertex VertexOut spectra_vertex(uint vertexID [[vertex_id]],
                                     constant SpectraVertex *vertices [[buffer(0)]]) {
         VertexOut out;
@@ -496,6 +617,138 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     fragment half4 spectra_fragment(VertexOut input [[stage_in]]) {
         return half4(input.color);
+    }
+
+    float2 rotate2(float2 value, float angle) {
+        float s = sin(angle);
+        float c = cos(angle);
+        return float2(value.x * c - value.y * s, value.x * s + value.y * c);
+    }
+
+    float2 complexSquare(float2 value) {
+        return float2(value.x * value.x - value.y * value.y, 2.0 * value.x * value.y);
+    }
+
+    float3 lerp3(float3 a, float3 b, float t) {
+        return a + (b - a) * clamp(t, 0.0, 1.0);
+    }
+
+    float3 paletteGradient(uint palette, float t) {
+        t = fract(t);
+        if (palette == 0) {
+            float3 a = float3(0.04, 0.78, 0.94);
+            float3 b = float3(0.28, 0.98, 0.46);
+            float3 c = float3(0.98, 0.25, 0.72);
+            return t < 0.5 ? lerp3(a, b, t * 2.0) : lerp3(b, c, (t - 0.5) * 2.0);
+        }
+        if (palette == 1) {
+            float3 a = float3(0.92, 0.16, 0.10);
+            float3 b = float3(1.00, 0.58, 0.12);
+            float3 c = float3(0.52, 0.12, 0.92);
+            return t < 0.56 ? lerp3(a, b, t / 0.56) : lerp3(b, c, (t - 0.56) / 0.44);
+        }
+        if (palette == 2) {
+            return 0.55 + 0.45 * cos(6.2831853 * (float3(t, t + 0.34, t + 0.68)));
+        }
+        float3 low = float3(0.10, 0.13, 0.14);
+        float3 high = float3(0.90, 0.94, 0.90);
+        return lerp3(low, high, smoothstep(0.08, 0.92, t));
+    }
+
+    float4 iterateFractal(float2 point, constant FractalUniforms &u) {
+        float audio = clamp(u.volume * (0.78 + u.sensitivity), 0.0, 1.0);
+        float bass = clamp(u.bass * (0.78 + u.sensitivity), 0.0, 1.2);
+        float mid = clamp(u.mid * (0.78 + u.sensitivity), 0.0, 1.2);
+        float treble = clamp(u.treble * (0.78 + u.sensitivity), 0.0, 1.2);
+        float beat = clamp(u.beat * u.beatReactivity, 0.0, 1.0);
+        float travel = u.time * (0.018 + u.motion * 0.090);
+        float rotateAmount = sin(travel * 0.73 + mid * 1.7) * (0.10 + u.motion * 0.42);
+        float zoom = 1.0 + bass * 0.28 + beat * 0.20 + audio * 0.14;
+        float2 p = rotate2(point, rotateAmount) / zoom;
+        float2 z = float2(0.0);
+        float2 c = p;
+        float2 previous = float2(0.0);
+        float2 phoenix = float2(-0.52 + bass * 0.18, 0.03 + beat * 0.18);
+
+        if (u.mode == 0) {
+            c = p * 1.58 + float2(-0.56 + sin(travel) * 0.035 + bass * 0.050, mid * 0.055);
+            z = float2(0.0);
+        } else if (u.mode == 1) {
+            z = p * (1.36 - beat * 0.12);
+            c = float2(
+                -0.74 + sin(travel * 1.3) * 0.12 + bass * 0.09,
+                0.22 + cos(travel * 0.9) * 0.20 + mid * 0.10
+            );
+        } else if (u.mode == 2) {
+            c = p * 1.72 + float2(-0.48 + bass * 0.08, -0.45 + sin(travel) * 0.08);
+            z = float2(0.0);
+        } else if (u.mode == 3) {
+            c = p * 1.66 + float2(-0.22 + sin(travel * 0.8) * 0.05, cos(travel * 0.7) * 0.05 + mid * 0.06);
+            z = float2(0.0);
+        } else {
+            z = p * 1.38;
+            c = float2(-0.42 + treble * 0.12 + sin(travel) * 0.04, 0.08 + mid * 0.10);
+            previous = float2(0.0);
+        }
+
+        int maxIterations = 50 + int(clamp(u.intensity, 0.0, 1.0) * 38.0 + treble * 12.0);
+        float minOrbit = 32.0;
+        int iteration = 0;
+        for (int i = 0; i < 104; i++) {
+            if (i >= maxIterations) {
+                break;
+            }
+
+            if (u.mode == 2) {
+                z = abs(z);
+                z = complexSquare(z) + c;
+            } else if (u.mode == 3) {
+                z = float2(z.x, -z.y);
+                z = complexSquare(z) + c;
+            } else if (u.mode == 4) {
+                float2 next = complexSquare(z) + c + phoenix * previous;
+                previous = z;
+                z = next;
+            } else {
+                z = complexSquare(z) + c;
+            }
+
+            float orbit = dot(z, z);
+            minOrbit = min(minOrbit, orbit);
+            iteration = i;
+            if (orbit > 16.0) {
+                break;
+            }
+        }
+
+        float escaped = dot(z, z) > 16.0 ? 1.0 : 0.0;
+        float normalized = float(iteration) / float(maxIterations);
+        float orbitGlow = exp(-minOrbit * (2.2 + u.glow * 4.8));
+        float edge = escaped > 0.5 ? pow(1.0 - normalized, 0.72) : orbitGlow;
+        float colorPhase = normalized * (1.8 + u.intensity * 2.4)
+            + travel * (0.42 + u.motion)
+            + treble * 0.55
+            + beat * 0.18;
+        float3 color = paletteGradient(u.palette, colorPhase);
+        float contour = 0.5 + 0.5 * sin((normalized * 68.0) + travel * 18.0 + treble * 6.0);
+        float brightness = 0.08
+            + edge * (0.54 + u.glow * 0.42)
+            + orbitGlow * (0.20 + bass * 0.30)
+            + contour * treble * 0.13
+            + beat * 0.10;
+        float vignette = smoothstep(1.55, 0.20, length(point));
+        color *= brightness * (0.55 + vignette * 0.62);
+        color += paletteGradient(u.palette, colorPhase + 0.21) * orbitGlow * (0.10 + u.glow * 0.30);
+        return float4(clamp(color, 0.0, 1.0), 1.0);
+    }
+
+    fragment half4 spectra_fractal_fragment(VertexOut input [[stage_in]],
+                                            constant FractalUniforms &uniforms [[buffer(0)]]) {
+        float2 size = max(uniforms.resolution, float2(1.0));
+        float2 uv = input.position.xy / size;
+        float2 point = (uv - 0.5) * 2.0;
+        point.x *= size.x / size.y;
+        return half4(iterateFractal(point, uniforms));
     }
     """
 }

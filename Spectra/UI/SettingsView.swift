@@ -37,8 +37,12 @@ struct SettingsView: View {
                     get: { appState.selectedPreset },
                     set: { appState.selectedPreset = $0 }
                 )) {
-                    ForEach(PresetCatalog.presets) { preset in
-                        Text(preset.name).tag(preset.id)
+                    ForEach(VisualPresetCategory.allCases) { category in
+                        Section(category.label) {
+                            ForEach(PresetCatalog.presets.filter { $0.category == category }) { preset in
+                                Text(preset.name).tag(preset.id)
+                            }
+                        }
                     }
                 }
 
@@ -59,6 +63,26 @@ struct SettingsView: View {
                     get: { appState.settings.reduceMotion },
                     set: { appState.settings.reduceMotion = $0 }
                 ))
+
+                Slider(value: presetSettingBinding(\.sensitivity), in: 0...1) {
+                    Text("Sensitivity")
+                }
+
+                Slider(value: presetSettingBinding(\.intensity), in: 0...1) {
+                    Text("Intensity")
+                }
+
+                Slider(value: presetSettingBinding(\.motionAmount), in: 0...1) {
+                    Text("Motion")
+                }
+
+                Slider(value: presetSettingBinding(\.glowAmount), in: 0...1) {
+                    Text("Glow")
+                }
+
+                Slider(value: presetSettingBinding(\.beatReactivity), in: 0...1) {
+                    Text("Beat Response")
+                }
 
                 Toggle("Show Debug Overlay", isOn: Binding(
                     get: { appState.settings.showDebugOverlay },
@@ -84,5 +108,16 @@ struct SettingsView: View {
             }
         }
         .padding()
+    }
+
+    private func presetSettingBinding(_ keyPath: WritableKeyPath<PresetSettings, Double>) -> Binding<Double> {
+        Binding(
+            get: { appState.presetSettings[keyPath: keyPath] },
+            set: { value in
+                var settings = appState.presetSettings
+                settings[keyPath: keyPath] = value
+                appState.presetSettings = settings
+            }
+        )
     }
 }

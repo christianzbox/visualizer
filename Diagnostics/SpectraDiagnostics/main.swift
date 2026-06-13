@@ -162,6 +162,7 @@ struct SpectraDiagnostics {
         let library = try device.makeLibrary(source: source, options: nil)
         try expect(library.makeFunction(name: "spectra_vertex") != nil, "Metal shader should expose spectra_vertex")
         try expect(library.makeFunction(name: "spectra_fragment") != nil, "Metal shader should expose spectra_fragment")
+        try expect(library.makeFunction(name: "spectra_fractal_fragment") != nil, "Metal shader should expose spectra_fractal_fragment")
     }
 
     private static func testSettingsPersistence() throws {
@@ -189,6 +190,11 @@ struct SpectraDiagnostics {
             try expect((0...1).contains(preset.defaultSettings.intensity), "\(preset.name) intensity out of range")
             try expect((0...1).contains(preset.defaultSettings.sensitivity), "\(preset.name) sensitivity out of range")
         }
+        let fractalPresets = PresetCatalog.presets.filter { $0.category == .fractal }
+        let fractalModes = fractalPresets.compactMap { $0.id.fractalMode }
+        try expect(fractalPresets.count == 5, "Preset catalog should expose five real fractal choices")
+        try expect(fractalModes.count == fractalPresets.count, "Every fractal preset should have a shader mode")
+        try expect(Set(fractalModes) == Set(0...4), "Fractal presets should map to distinct shader formulas")
     }
 
     private static func testCaptureErrors() throws {

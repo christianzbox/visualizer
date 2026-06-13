@@ -44,12 +44,22 @@ final class AppState: ObservableObject {
 
     var selectedPreset: VisualPresetID {
         get { settings.selectedPreset }
-        set { settings.selectedPreset = newValue }
+        set {
+            guard settings.selectedPreset != newValue else { return }
+            settings.selectedPreset = newValue
+            settings.presetSettings = PresetCatalog.descriptor(for: newValue).defaultSettings
+        }
     }
 
     var presetSettings: PresetSettings {
         get { settings.presetSettings }
         set { settings.presetSettings = newValue }
+    }
+
+    var renderSettings: PresetSettings {
+        var output = settings.presetSettings
+        output.reduceMotion = settings.reduceMotion
+        return output
     }
 
     var captureMode: CaptureMode {

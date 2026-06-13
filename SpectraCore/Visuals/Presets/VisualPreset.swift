@@ -6,6 +6,11 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
     case particleGalaxy
     case neonTunnel
     case minimalWaveform
+    case mandelbrotBloom
+    case juliaVortex
+    case burningShip
+    case tricornPulse
+    case phoenixField
 
     public var id: String { rawValue }
 
@@ -16,15 +21,49 @@ public enum VisualPresetID: String, Codable, CaseIterable, Identifiable, Sendabl
         case .particleGalaxy: return "Particle Galaxy"
         case .neonTunnel: return "Neon Tunnel"
         case .minimalWaveform: return "Minimal Waveform"
+        case .mandelbrotBloom: return "Mandelbrot Bloom"
+        case .juliaVortex: return "Julia Vortex"
+        case .burningShip: return "Burning Ship"
+        case .tricornPulse: return "Tricorn Pulse"
+        case .phoenixField: return "Phoenix Field"
         }
+    }
+
+    public var fractalMode: Int? {
+        switch self {
+        case .mandelbrotBloom: return 0
+        case .juliaVortex: return 1
+        case .burningShip: return 2
+        case .tricornPulse: return 3
+        case .phoenixField: return 4
+        case .spectrumBars, .liquidWaveform, .particleGalaxy, .neonTunnel, .minimalWaveform:
+            return nil
+        }
+    }
+
+    public var isFractal: Bool {
+        fractalMode != nil
     }
 }
 
-public enum VisualPresetCategory: String, Codable, Sendable {
+public enum VisualPresetCategory: String, Codable, CaseIterable, Identifiable, Sendable {
     case spectrum
     case waveform
     case particles
     case ambient
+    case fractal
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .spectrum: return "Spectrum"
+        case .waveform: return "Waveform"
+        case .particles: return "Particles"
+        case .ambient: return "Ambient"
+        case .fractal: return "Fractals"
+        }
+    }
 }
 
 public enum ColorPalette: String, Codable, CaseIterable, Identifiable, Sendable {

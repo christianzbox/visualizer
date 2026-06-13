@@ -18,5 +18,14 @@ final class PresetCatalogTests: XCTestCase {
             XCTAssert((0...1).contains(preset.defaultSettings.glowAmount), "\(preset.name) glow out of range")
         }
     }
+
+    func testFractalPresetsMapToUniqueShaderModes() {
+        let fractalPresets = PresetCatalog.presets.filter { $0.category == .fractal }
+        let modes = fractalPresets.compactMap { $0.id.fractalMode }
+
+        XCTAssertEqual(fractalPresets.count, 5)
+        XCTAssertEqual(modes.count, fractalPresets.count)
+        XCTAssertEqual(Set(modes), Set(0...4))
+    }
 }
 #endif

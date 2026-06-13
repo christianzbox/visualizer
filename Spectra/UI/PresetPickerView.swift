@@ -14,8 +14,12 @@ struct PresetPickerView: View {
                 get: { appState.selectedPreset },
                 set: { appState.selectedPreset = $0 }
             )) {
-                ForEach(PresetCatalog.presets) { preset in
-                    Text(preset.name).tag(preset.id)
+                ForEach(VisualPresetCategory.allCases) { category in
+                    Section(category.label) {
+                        ForEach(PresetCatalog.presets.filter { $0.category == category }) { preset in
+                            Text(preset.name).tag(preset.id)
+                        }
+                    }
                 }
             }
             .pickerStyle(.menu)

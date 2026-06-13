@@ -9,7 +9,7 @@ struct MetalVisualizerView: NSViewRepresentable {
         MetalRenderer(
             frameStore: appState.frameStore,
             presetProvider: { appState.selectedPreset },
-            settingsProvider: { appState.presetSettings },
+            settingsProvider: { appState.renderSettings },
             fpsHandler: { fps in
                 DispatchQueue.main.async {
                     appState.updateFramesPerSecond(fps)
@@ -27,7 +27,7 @@ struct MetalVisualizerView: NSViewRepresentable {
     func updateNSView(_ nsView: MTKView, context: Context) {
         context.coordinator.update(
             presetProvider: { appState.selectedPreset },
-            settingsProvider: { appState.presetSettings }
+            settingsProvider: { appState.renderSettings }
         )
     }
 }
